@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">Pulsar Phone</string>
+    <string name="vpn_title">Red Privada Pulsar</string>
+    <string name="vpn_connected">Conectado al PC</string>
+    <string name="vpn_disconnected">Desconectado del PC</string>
+    <string name="pc_apps_title">Aplicaciones de Pulsar OS</string>
+    <string name="apps_empty">No se encontraron aplicaciones en el PC</string>
+    <string name="scan_or_paste">Vincular PC (Escanear o Pegar)</string>
+    <string name="share_to_pulsar">Enviar a Pulsar OS (FlyDrop)</string>
+    <string name="notification_service_label">Sincronizador de Notificaciones Pulsar</string>
+    <string name="send_clipboard">Copiar portapapeles al PC</string>
+    <string name="open_files">Explorar Archivos del PC</string>
+    <string name="connected_pc_label">PC Conectado: %1$s</string>
+    <string name="close_app">Cerrar Aplicación</string>
+    <string name="keyboard_toggle">Teclado</string>
+    <string name="file_transfer_success">Archivo enviado con éxito a FlyDrop</string>
+    <string name="file_transfer_failed">Error al enviar a FlyDrop</string>
+</resources>
