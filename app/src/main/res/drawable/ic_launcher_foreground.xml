@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Lucide Smartphone Icon - Scaled to fill the icon prominently -->
+    <!-- Outer phone body (Lucide rect rx="2" ry="2" scaled) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M38,20 L70,20 A8,8 0 0,1 78,28 L78,80 A8,8 0 0,1 70,88 L38,88 A8,8 0 0,1 30,80 L30,28 A8,8 0 0,1 38,20 Z"/>
+
+    <!-- Lucide Speaker / Camera Top Slit -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M49,28 L59,28"/>
+
+    <!-- Lucide Home Indicator / Navigation Dot (M12 18h.01) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,80 L54.01,80"/>
+
+</vector>

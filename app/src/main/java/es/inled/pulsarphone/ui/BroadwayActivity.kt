@@ -36,7 +36,7 @@ class BroadwayActivity : AppCompatActivity() {
     private var appName: String = "App Broadway"
     private var broadwayUrl: String = ""
     private var isPanMode = false
-    private var zoomStep = 0 // 0: Fit, 1: 1.4x, 2: 1.8x
+    private var zoomStep = 0 // 0: Fit, 1: 1.3x, 2: 1.7x
     private var appLoaded = false
 
     @Volatile
@@ -108,6 +108,19 @@ class BroadwayActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun onConnectionState(connected: Boolean) {
+            runOnUiThread {
+                if (connected) {
+                    revealAppView()
+                } else {
+                    binding.loadingAppTitle.text = getString(R.string.connecting_broadway)
+                    binding.loadingLayout.visibility = View.VISIBLE
+                    binding.loadingLayout.alpha = 1f
+                }
+            }
+        }
+
+        @JavascriptInterface
         fun onKeyboardStatus(show: Boolean) {
             runOnUiThread {
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -154,14 +167,14 @@ class BroadwayActivity : AppCompatActivity() {
                 val url = request?.url ?: return null
                 val path = url.path ?: ""
 
-                // 1. Intercept root HTML with bounded viewport (prevents infinite zoom!)
+                // 1. Intercept root HTML with controlled viewport bounds
                 if (path == "/" || path.isEmpty() || path == "/index.html") {
                     val html = buildMobileBroadwayHtml(bgColorHex)
                     val stream: InputStream = ByteArrayInputStream(html.toByteArray(StandardCharsets.UTF_8))
                     return WebResourceResponse("text/html", "UTF-8", stream)
                 }
 
-                // 2. Intercept broadway.js to enable controlled pan & zoom mode and coordinate scaling
+                // 2. Intercept broadway.js to enable auto-reconnect, on-screen keyboard, and clean fit
                 if (path.endsWith("broadway.js")) {
                     val js = fetchAndPatchBroadwayJs(url.toString())
                     if (js.isNotEmpty()) {
@@ -229,9 +242,52 @@ class BroadwayActivity : AppCompatActivity() {
 
         if (rawJs.isEmpty()) return ""
 
-        // Patch 1: Mode selector support in touch events:
-        // When pulsarPanModeActive is true: DO NOT call preventDefault!
-        // This lets the browser pan and scroll across the canvas with 1 finger!
+        var patched = rawJs
+
+        // Patch 1: Auto-reconnect on WebSocket disconnect (No frozen blank screen!)
+        val oncloseTarget = "if (inputSocket != null)\n            alert (\"disconnected\");\n        inputSocket = null;"
+        val oncloseReplacement = """
+            inputSocket = null;
+            if (window.BroadwayBridge && window.BroadwayBridge.onConnectionState) {
+                window.BroadwayBridge.onConnectionState(false);
+            }
+            setTimeout(function() {
+                if (!inputSocket) connect();
+            }, 1200);
+        """.trimIndent()
+        if (patched.contains(oncloseTarget)) {
+            patched = patched.replace(oncloseTarget, oncloseReplacement)
+        }
+
+        val onopenTarget = "inputSocket = ws;"
+        val onopenReplacement = """
+            inputSocket = ws;
+            if (window.BroadwayBridge && window.BroadwayBridge.onConnectionState) {
+                window.BroadwayBridge.onConnectionState(true);
+            }
+        """.trimIndent()
+        if (patched.contains(onopenTarget)) {
+            patched = patched.replace(onopenTarget, onopenReplacement)
+        }
+
+        // Patch 2: On-screen fakeInput so Android WebView / Chromium can trigger the soft keyboard!
+        val fakeInputTarget = "fakeInput.style.position = \"absolute\";\n        fakeInput.style.left = \"-1000px\";\n        fakeInput.style.top = \"-1000px\";"
+        val fakeInputReplacement = """
+            fakeInput.style.position = "fixed";
+            fakeInput.style.left = "0px";
+            fakeInput.style.bottom = "0px";
+            fakeInput.style.width = "1px";
+            fakeInput.style.height = "1px";
+            fakeInput.style.opacity = "0.01";
+            fakeInput.style.zIndex = "999";
+            fakeInput.style.pointerEvents = "none";
+        """.trimIndent()
+        if (patched.contains(fakeInputTarget)) {
+            patched = patched.replace(fakeInputTarget, fakeInputReplacement)
+        }
+
+        // Patch 3: Pan Mode vs Touch Mode in touch events
+        // In Pan Mode: do NOT preventDefault, letting browser pan and scroll smoothly with 1 finger!
         val touchStartTarget = "function onTouchStart(ev) {\n    ev.preventDefault();"
         val touchStartReplacement = """
             function onTouchStart(ev) {
@@ -259,7 +315,6 @@ class BroadwayActivity : AppCompatActivity() {
                 ev.preventDefault();
         """.trimIndent()
 
-        var patched = rawJs
         if (patched.contains(touchStartTarget)) {
             patched = patched.replace(touchStartTarget, touchStartReplacement)
         }
@@ -270,20 +325,23 @@ class BroadwayActivity : AppCompatActivity() {
             patched = patched.replace(touchEndTarget, touchEndReplacement)
         }
 
-        // Patch 2: Coordinate scaling in getPositionsFromEvent
+        // Patch 4: Coordinate scaling and offset mapping in getPositionsFromEvent
         val posTarget = "function getPositionsFromEvent(ev, relativeId) {\n    var absX, absY;\n    absX = ev.pageX;\n    absY = ev.pageY;"
         val posReplacement = """
             function getPositionsFromEvent(ev, relativeId) {
                 var scale = window.broadwayScale || 1.0;
-                var absX, absY;
-                absX = (ev.pageX !== undefined ? ev.pageX : (ev.clientX || 0)) / scale;
-                absY = (ev.pageY !== undefined ? ev.pageY : (ev.clientY || 0)) / scale;
+                var offX = window.broadwayOffsetX || 0;
+                var offY = window.broadwayOffsetY || 0;
+                var rawX = (ev.pageX !== undefined ? ev.pageX : (ev.clientX || 0));
+                var rawY = (ev.pageY !== undefined ? ev.pageY : (ev.clientY || 0));
+                var absX = (rawX - offX) / scale;
+                var absY = (rawY - offY) / scale;
         """.trimIndent()
         if (patched.contains(posTarget)) {
             patched = patched.replace(posTarget, posReplacement)
         }
 
-        // Patch 3: Hook BROADWAY_OP_SET_SHOW_KEYBOARD to automatically toggle phone keyboard
+        // Patch 5: Hook BROADWAY_OP_SET_SHOW_KEYBOARD
         val kbTarget = "case BROADWAY_OP_SET_SHOW_KEYBOARD:\n            showKeyboard = cmd.get_16() != 0;\n            showKeyboardChanged = true;\n            break;"
         val kbReplacement = """
             case BROADWAY_OP_SET_SHOW_KEYBOARD:
@@ -299,22 +357,30 @@ class BroadwayActivity : AppCompatActivity() {
             patched = patched.replace(kbTarget, kbReplacement)
         }
 
-        // Patch 4: Hook DISPLAY_OP_SHOW_SURFACE and DISPLAY_OP_RESIZE_NODE
+        // Patch 6: Hook DISPLAY_OP_SHOW_SURFACE and DISPLAY_OP_RESIZE_NODE
         val showSurfaceTarget = "div.style[\"visibility\"] = \"visible\";\n            break;"
         val showSurfaceReplacement = "div.style[\"visibility\"] = \"visible\";\n            if (window.onPulsarSurfaceUpdated) window.onPulsarSurfaceUpdated();\n            break;"
         if (patched.contains(showSurfaceTarget)) {
             patched = patched.replace(showSurfaceTarget, showSurfaceReplacement)
         }
 
-        // Patch 5: Append mobile Phosh-style adapter script with Pan Mode toggle
+        // Patch 7: Clean native layout adapter preserving GTK aesthetics
         val mobileHelperScript = """
             
-            // --- Pulsar Phosh-style Linux Mobile Adapter ---
+            // --- Pulsar Clean Layout & Input Adapter ---
             window.pulsarPanModeActive = false;
             window.broadwayScale = 1.0;
+            window.broadwayOffsetX = 0;
+            window.broadwayOffsetY = 0;
 
             window.setPulsarPanMode = function(active) {
                 window.pulsarPanModeActive = !!active;
+            };
+
+            window.triggerBroadwayKeyboard = function() {
+                if (typeof fakeInput !== 'undefined' && fakeInput) {
+                    fakeInput.focus();
+                }
             };
 
             window.onPulsarSurfaceUpdated = function() {
@@ -348,32 +414,40 @@ class BroadwayActivity : AppCompatActivity() {
                     var baseW = root.width || root.div.offsetWidth || 800;
                     var baseH = root.height || root.div.offsetHeight || 600;
 
-                    // Phosh-style mobile width fit
-                    var scale = vw / baseW;
+                    // Clean proportional fit preserving native aspect ratio without distortion
+                    var scale = 1.0;
+                    if (baseW > vw || baseH > vh) {
+                        scale = Math.min(vw / baseW, vh / baseH);
+                        scale = Math.max(0.4, scale);
+                    }
                     window.broadwayScale = scale;
 
+                    var renderedW = Math.round(baseW * scale);
+                    var renderedH = Math.round(baseH * scale);
+                    var offsetX = Math.max(0, Math.round((vw - renderedW) / 2));
+                    var offsetY = Math.max(0, Math.round((vh - renderedH) / 2));
+                    window.broadwayOffsetX = offsetX;
+                    window.broadwayOffsetY = offsetY;
+
+                    // Keep native GTK window aesthetics (do not strip shadows or borders!)
                     root.div.style.position = 'absolute';
                     root.div.style.transformOrigin = '0 0';
-                    root.div.style.transform = 'scale(' + scale + ')';
-                    root.div.style.left = '0px';
-                    root.div.style.top = '0px';
-                    root.div.style.boxShadow = 'none';
-                    root.div.style.borderRadius = '0px';
-                    root.div.style.border = 'none';
+                    root.div.style.transform = (scale !== 1.0) ? ('scale(' + scale + ')') : 'none';
+                    root.div.style.left = offsetX + 'px';
+                    root.div.style.top = offsetY + 'px';
 
-                    var contentHeight = Math.ceil(baseH * scale);
-                    document.body.style.minHeight = Math.max(vh, contentHeight) + 'px';
-                    document.body.style.width = vw + 'px';
+                    document.body.style.minHeight = Math.max(vh, offsetY + renderedH) + 'px';
+                    document.body.style.width = Math.max(vw, offsetX + renderedW) + 'px';
 
-                    // Scale child popups/dialogs proportionally
+                    // Position child popups/dialogs proportionally
                     for (var id in surfaces) {
                         var child = surfaces[id];
                         if (child && child !== root && child.div) {
                             child.div.style.transformOrigin = '0 0';
-                            child.div.style.transform = 'scale(' + scale + ')';
+                            child.div.style.transform = (scale !== 1.0) ? ('scale(' + scale + ')') : 'none';
                             if (child.x !== undefined && child.y !== undefined) {
-                                child.div.style.left = Math.round(child.x * scale) + 'px';
-                                child.div.style.top = Math.round(child.y * scale) + 'px';
+                                child.div.style.left = Math.round(offsetX + child.x * scale) + 'px';
+                                child.div.style.top = Math.round(offsetY + child.y * scale) + 'px';
                             }
                         }
                     }
@@ -385,7 +459,6 @@ class BroadwayActivity : AppCompatActivity() {
             };
 
             window.addEventListener('resize', window.onPulsarSurfaceUpdated);
-            setInterval(window.onPulsarSurfaceUpdated, 400);
         """.trimIndent()
 
         patched += "\n" + mobileHelperScript
@@ -407,12 +480,10 @@ class BroadwayActivity : AppCompatActivity() {
         }
 
         binding.btnToggleKeyboard.setOnClickListener {
-            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             binding.broadwayWebView.requestFocus()
-            binding.broadwayWebView.evaluateJavascript(
-                "if (typeof fakeInput !== 'undefined' && fakeInput) { fakeInput.focus(); }", null
-            )
-            imm.showSoftInput(binding.broadwayWebView, InputMethodManager.SHOW_IMPLICIT)
+            binding.broadwayWebView.evaluateJavascript("if (window.triggerBroadwayKeyboard) window.triggerBroadwayKeyboard();", null)
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(binding.broadwayWebView, InputMethodManager.SHOW_FORCED)
         }
     }
 
@@ -433,7 +504,7 @@ class BroadwayActivity : AppCompatActivity() {
         zoomStep = (zoomStep + 1) % 3
         when (zoomStep) {
             0 -> {
-                // Reset to Phosh Mobile Fit
+                // Reset to Natural Fit
                 binding.broadwayWebView.zoomOut()
                 binding.broadwayWebView.evaluateJavascript("if (window.onPulsarSurfaceUpdated) window.onPulsarSurfaceUpdated();", null)
                 Toast.makeText(this, getString(R.string.zoom_fit_toast), Toast.LENGTH_SHORT).show()
