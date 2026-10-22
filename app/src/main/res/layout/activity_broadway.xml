@@ -75,20 +75,10 @@
                 android:layout_marginEnd="6dp"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:maxWidth="130dp"
+                android:maxWidth="140dp"
                 android:text="App"
                 android:textAppearance="?attr/textAppearanceLabelMedium"
                 android:textColor="?attr/colorOnSurface" />
-
-            <!-- Toggle Touch vs Pan Mode -->
-            <ImageButton
-                android:id="@+id/btnToggleMode"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Modo de interacción"
-                android:src="@drawable/ic_touch_pointer"
-                app:tint="?attr/colorOnSurface" />
 
             <!-- Toggle Zoom Level / Reset Fit -->
             <ImageButton

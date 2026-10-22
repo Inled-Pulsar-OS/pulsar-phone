@@ -135,6 +135,15 @@
 
                     </LinearLayout>
 
+                    <!-- Notifications Sync Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnNotificationSync"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Sincronizar Notificaciones" />
+
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>

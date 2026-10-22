@@ -19,12 +19,10 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import es.inled.pulsarphone.PulsarPhoneApp
-import es.inled.pulsarphone.R
 import es.inled.pulsarphone.databinding.ActivityBroadwayBinding
 import es.inled.pulsarphone.net.PulsarApiClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -36,7 +34,6 @@ class BroadwayActivity : AppCompatActivity() {
     private lateinit var binding: ActivityBroadwayBinding
     private var appName: String = "App Broadway"
     private var broadwayUrl: String = ""
-    private var isPanMode = false
     private var zoomStep = 0 // 0: Fit (Phosh), 1: 1.5x, 2: 2.0x
     private var appLoaded = false
 
@@ -106,6 +103,19 @@ class BroadwayActivity : AppCompatActivity() {
         @JavascriptInterface
         fun onAppLoaded() {
             revealAppView()
+        }
+
+        @JavascriptInterface
+        fun onKeyboardStatus(show: Boolean) {
+            runOnUiThread {
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                if (show) {
+                    binding.broadwayWebView.requestFocus()
+                    imm.showSoftInput(binding.broadwayWebView, InputMethodManager.SHOW_IMPLICIT)
+                } else {
+                    imm.hideSoftInputFromWindow(binding.broadwayWebView.windowToken, 0)
+                }
+            }
         }
     }
 
@@ -217,12 +227,13 @@ class BroadwayActivity : AppCompatActivity() {
 
         if (rawJs.isEmpty()) return ""
 
-        // Patch 1: Multi-touch and pan support in onTouchStart, onTouchMove, onTouchEnd
-        // Do not call preventDefault on multi-touch (>1 fingers) so browser handles pinch zoom and pan!
+        // Patch 1: Automatic gesture detection:
+        // When 2 or more touches: DO NOT preventDefault! Let browser natively handle pinch-to-zoom and two-finger pan at 60fps!
+        // When 1 touch: preventDefault and forward tap/drag to GTK!
         val touchStartTarget = "function onTouchStart(ev) {\n    ev.preventDefault();"
         val touchStartReplacement = """
             function onTouchStart(ev) {
-                if (window.pulsarPanModeActive || (ev.touches && ev.touches.length > 1)) {
+                if (ev.touches && ev.touches.length > 1) {
                     return;
                 }
                 ev.preventDefault();
@@ -231,7 +242,7 @@ class BroadwayActivity : AppCompatActivity() {
         val touchMoveTarget = "function onTouchMove(ev) {\n    ev.preventDefault();"
         val touchMoveReplacement = """
             function onTouchMove(ev) {
-                if (window.pulsarPanModeActive || (ev.touches && ev.touches.length > 1)) {
+                if (ev.touches && ev.touches.length > 1) {
                     return;
                 }
                 ev.preventDefault();
@@ -240,7 +251,7 @@ class BroadwayActivity : AppCompatActivity() {
         val touchEndTarget = "function onTouchEnd(ev) {\n    ev.preventDefault();"
         val touchEndReplacement = """
             function onTouchEnd(ev) {
-                if (window.pulsarPanModeActive || (ev.touches && ev.touches.length > 0)) {
+                if (ev.touches && ev.touches.length > 0) {
                     return;
                 }
                 ev.preventDefault();
@@ -270,23 +281,34 @@ class BroadwayActivity : AppCompatActivity() {
             patched = patched.replace(posTarget, posReplacement)
         }
 
-        // Patch 3: Hook DISPLAY_OP_SHOW_SURFACE and DISPLAY_OP_RESIZE_NODE
+        // Patch 3: Hook BROADWAY_OP_SET_SHOW_KEYBOARD to automatically toggle phone keyboard
+        val kbTarget = "case BROADWAY_OP_SET_SHOW_KEYBOARD:\n            showKeyboard = cmd.get_16() != 0;\n            showKeyboardChanged = true;\n            break;"
+        val kbReplacement = """
+            case BROADWAY_OP_SET_SHOW_KEYBOARD:
+                showKeyboard = cmd.get_16() != 0;
+                showKeyboardChanged = true;
+                if (typeof updateKeyboardStatus === 'function') updateKeyboardStatus();
+                if (window.BroadwayBridge && typeof window.BroadwayBridge.onKeyboardStatus === 'function') {
+                    window.BroadwayBridge.onKeyboardStatus(showKeyboard);
+                }
+                break;
+        """.trimIndent()
+        if (patched.contains(kbTarget)) {
+            patched = patched.replace(kbTarget, kbReplacement)
+        }
+
+        // Patch 4: Hook DISPLAY_OP_SHOW_SURFACE and DISPLAY_OP_RESIZE_NODE
         val showSurfaceTarget = "div.style[\"visibility\"] = \"visible\";\n            break;"
         val showSurfaceReplacement = "div.style[\"visibility\"] = \"visible\";\n            if (window.onPulsarSurfaceUpdated) window.onPulsarSurfaceUpdated();\n            break;"
         if (patched.contains(showSurfaceTarget)) {
             patched = patched.replace(showSurfaceTarget, showSurfaceReplacement)
         }
 
-        // Patch 4: Append mobile Phosh-style adapter script
+        // Patch 5: Append mobile Phosh-style adapter script
         val mobileHelperScript = """
             
             // --- Pulsar Phosh-style Linux Mobile Adapter ---
-            window.pulsarPanModeActive = false;
             window.broadwayScale = 1.0;
-
-            window.setPulsarPanMode = function(active) {
-                window.pulsarPanModeActive = !!active;
-            };
 
             window.onPulsarSurfaceUpdated = function() {
                 var vw = window.innerWidth || document.documentElement.clientWidth;
@@ -369,10 +391,6 @@ class BroadwayActivity : AppCompatActivity() {
             closeAndExit()
         }
 
-        binding.btnToggleMode.setOnClickListener {
-            togglePanMode()
-        }
-
         binding.btnToggleZoom.setOnClickListener {
             cycleZoom()
         }
@@ -380,20 +398,10 @@ class BroadwayActivity : AppCompatActivity() {
         binding.btnToggleKeyboard.setOnClickListener {
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             binding.broadwayWebView.requestFocus()
-            imm.showSoftInput(binding.broadwayWebView, InputMethodManager.SHOW_IMPLICIT)
-        }
-    }
-
-    private fun togglePanMode() {
-        isPanMode = !isPanMode
-        if (isPanMode) {
-            binding.btnToggleMode.setImageResource(R.drawable.ic_pan_hand)
-            binding.broadwayWebView.evaluateJavascript("window.setPulsarPanMode(true);", null)
-            Toast.makeText(this, "Modo desplazamiento • Arrastra con 1 dedo para moverte", Toast.LENGTH_SHORT).show()
-        } else {
-            binding.btnToggleMode.setImageResource(R.drawable.ic_touch_pointer)
-            binding.broadwayWebView.evaluateJavascript("window.setPulsarPanMode(false);", null)
-            Toast.makeText(this, "Modo táctil • Toca para interactuar (2 dedos para zoom)", Toast.LENGTH_SHORT).show()
+            binding.broadwayWebView.evaluateJavascript(
+                "if (typeof fakeInput !== 'undefined' && fakeInput) { fakeInput.focus(); }", null
+            )
+            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
         }
     }
 
@@ -408,11 +416,11 @@ class BroadwayActivity : AppCompatActivity() {
             }
             1 -> {
                 binding.broadwayWebView.zoomIn()
-                Toast.makeText(this, "Zoom 1.5x • Usa 2 dedos para explorar", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Zoom 1.5x", Toast.LENGTH_SHORT).show()
             }
             2 -> {
                 binding.broadwayWebView.zoomIn()
-                Toast.makeText(this, "Zoom 2.0x • Detalle", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Zoom 2.0x", Toast.LENGTH_SHORT).show()
             }
         }
     }

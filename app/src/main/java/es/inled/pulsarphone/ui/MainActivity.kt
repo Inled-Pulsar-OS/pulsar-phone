@@ -10,6 +10,7 @@ import android.net.NetworkRequest
 import android.net.Uri
 import android.net.VpnService
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -70,6 +71,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateVpnButtonState()
+        updateNotificationSyncButton()
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -114,6 +116,45 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnClearSearch.setOnClickListener {
             binding.searchAppsInput.text?.clear()
+        }
+
+        updateNotificationSyncButton()
+    }
+
+    private fun isNotificationAccessGranted(): Boolean {
+        val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        return flat != null && flat.contains(packageName)
+    }
+
+    private fun updateNotificationSyncButton() {
+        val granted = isNotificationAccessGranted()
+        if (granted) {
+            binding.btnNotificationSync.text = "🔔 Notificaciones: Activas (Toca para probar)"
+            binding.btnNotificationSync.setIconResource(android.R.drawable.ic_dialog_info)
+            binding.btnNotificationSync.setOnClickListener {
+                lifecycleScope.launch {
+                    val res = PulsarApiClient.sendNotification(
+                        es.inled.pulsarphone.data.NotificationPayload(
+                            appName = "Pulsar Phone",
+                            title = "Sincronización de Notificaciones",
+                            text = "¡Las notificaciones de tu teléfono están activas y sincronizadas con Pulsar OS!",
+                            packageName = packageName
+                        )
+                    )
+                    if (res.isSuccess) {
+                        Toast.makeText(this@MainActivity, "Notificación enviada al PC", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Error enviando notificación: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        } else {
+            binding.btnNotificationSync.text = "🔔 Activar Notificaciones (Permiso)"
+            binding.btnNotificationSync.setIconResource(android.R.drawable.ic_lock_idle_alarm)
+            binding.btnNotificationSync.setOnClickListener {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                Toast.makeText(this, "Permite el acceso a notificaciones para sincronizar con tu PC", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
