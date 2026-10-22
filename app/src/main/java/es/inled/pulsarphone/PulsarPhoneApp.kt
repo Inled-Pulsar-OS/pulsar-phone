@@ -12,6 +12,7 @@ class PulsarPhoneApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        com.google.android.material.color.DynamicColors.applyToActivitiesIfAvailable(this)
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         es.inled.pulsarphone.net.PulsarVpnManager.init(this)
     }

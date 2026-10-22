@@ -3,6 +3,10 @@ package es.inled.pulsarphone.ui
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import android.net.VpnService
 import android.os.Bundle
@@ -11,6 +15,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.journeyapps.barcodescanner.ScanContract
@@ -28,6 +33,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: AppAdapter
+    private var allApps: List<PcApp> = emptyList()
 
     // Camera QR Code Scanner Launcher
     private val qrScannerLauncher = registerForActivityResult(ScanContract()) { result ->
@@ -54,6 +60,7 @@ class MainActivity : AppCompatActivity() {
 
         setupRecyclerView()
         setupListeners()
+        setupVpnMonitor()
 
         handleDeepLink(intent)
         refreshStatusAndApps()
@@ -97,6 +104,16 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnMountFiles.setOnClickListener {
             openSystemFileManager()
+        }
+
+        binding.searchAppsInput.doAfterTextChanged { text ->
+            val query = text?.toString().orEmpty()
+            binding.btnClearSearch.visibility = if (query.isNotBlank()) View.VISIBLE else View.GONE
+            filterApps(query)
+        }
+
+        binding.btnClearSearch.setOnClickListener {
+            binding.searchAppsInput.text?.clear()
         }
     }
 
@@ -142,42 +159,99 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun isRealVpnActive(): Boolean {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val activeNetwork = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(activeNetwork) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+    }
+
+    private fun setupVpnMonitor() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        try {
+            val request = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_VPN)
+                .build()
+            cm.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    runOnUiThread { updateVpnButtonState() }
+                }
+                override fun onLost(network: Network) {
+                    runOnUiThread { updateVpnButtonState() }
+                }
+            })
+        } catch (e: Exception) {
+            // fallback handled by onResume
+        }
+    }
+
     private fun toggleVpn() {
-        if (PulsarVpnManager.isVpnRunning()) {
-            lifecycleScope.launch {
-                PulsarVpnManager.stopTunnel()
-                updateVpnButtonState()
-                Toast.makeText(this@MainActivity, "VPN Desconectada", Toast.LENGTH_SHORT).show()
+        val isRealVpn = isRealVpnActive() || PulsarVpnManager.isVpnRunning()
+        if (isRealVpn) {
+            // If internal WireGuard tunnel is active, stop it
+            if (PulsarVpnManager.isVpnRunning()) {
+                lifecycleScope.launch {
+                    PulsarVpnManager.stopTunnel()
+                    updateVpnButtonState()
+                    Toast.makeText(this@MainActivity, "VPN Desconectada", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                // If system Tailscale VPN is active, open Tailscale to toggle
+                val tsIntent = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
+                if (tsIntent != null) {
+                    startActivity(tsIntent)
+                } else {
+                    try {
+                        startActivity(Intent("android.net.vpn.SETTINGS"))
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "VPN Activa a través del sistema", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         } else {
-            val vpnIntent = VpnService.prepare(this)
-            if (vpnIntent != null) {
-                vpnPermissionLauncher.launch(vpnIntent)
+            // Not connected: open Tailscale for 1-click connect/login if installed
+            val tsIntent = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
+            if (tsIntent != null) {
+                startActivity(tsIntent)
             } else {
-                startInternalVpn()
+                // Otherwise start internal WireGuard service
+                val vpnIntent = VpnService.prepare(this)
+                if (vpnIntent != null) {
+                    vpnPermissionLauncher.launch(vpnIntent)
+                } else {
+                    startInternalVpn()
+                }
             }
         }
     }
 
     private fun startInternalVpn() {
         val cfg = PulsarPhoneApp.instance.getConfig()
+        if (!PulsarPhoneApp.instance.isConfigured()) {
+            Toast.makeText(this, "Primero vincula tu PC escaneando el código QR", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         lifecycleScope.launch {
             Toast.makeText(this@MainActivity, "Iniciando VPN segura...", Toast.LENGTH_SHORT).show()
             val res = PulsarVpnManager.startTunnel(
                 serverEndpoint = cfg.pcIp,
-                serverPubKey = "PulsarServerPublicKeySampleOrGenerated",
+                serverPubKey = "",
                 serverPort = 51820
             )
             updateVpnButtonState()
             if (res.isSuccess) {
                 Toast.makeText(this@MainActivity, "VPN Conectada a ${cfg.pcAlias}", Toast.LENGTH_SHORT).show()
+            } else {
+                val err = res.exceptionOrNull()?.message ?: "Error desconocido"
+                Toast.makeText(this@MainActivity, "Error al iniciar VPN: $err", Toast.LENGTH_LONG).show()
             }
         }
     }
 
     private fun updateVpnButtonState() {
-        val isRunning = PulsarVpnManager.isVpnRunning()
-        if (isRunning) {
+        val isRealVpn = isRealVpnActive() || PulsarVpnManager.isVpnRunning()
+        if (isRealVpn) {
             binding.btnToggleVpn.text = "VPN: Activa"
         } else {
             binding.btnToggleVpn.text = "VPN: Inactiva"
@@ -213,11 +287,12 @@ class MainActivity : AppCompatActivity() {
                 binding.swipeRefresh.isRefreshing = false
 
                 if (appsResult.isSuccess) {
-                    val apps = appsResult.getOrDefault(emptyList())
-                    adapter.setApps(apps)
-                    binding.appsCount.text = "${apps.size} apps"
-                    binding.emptyAppsText.visibility = if (apps.isEmpty()) View.VISIBLE else View.GONE
+                    allApps = appsResult.getOrDefault(emptyList())
+                    val currentQuery = binding.searchAppsInput.text?.toString().orEmpty()
+                    filterApps(currentQuery)
                 } else {
+                    allApps = emptyList()
+                    filterApps("")
                     binding.emptyAppsText.visibility = View.VISIBLE
                     binding.emptyAppsText.text = "Error al obtener aplicaciones del PC"
                 }
@@ -227,14 +302,37 @@ class MainActivity : AppCompatActivity() {
                 binding.statusText.text = "${cfg.pcAlias} (Sin respuesta)"
                 binding.pcInfoText.text = "Comprueba que Pulsar VPN esté abierto en tu PC (${cfg.pcIp})"
                 binding.swipeRefresh.isRefreshing = false
+                allApps = emptyList()
+                filterApps("")
             }
         }
     }
 
+    private fun filterApps(query: String) {
+        val trimmed = query.trim()
+        val filtered = if (trimmed.isBlank()) {
+            allApps
+        } else {
+            allApps.filter {
+                it.name.contains(trimmed, ignoreCase = true) ||
+                (it.comment ?: "").contains(trimmed, ignoreCase = true)
+            }
+        }
+        adapter.setApps(filtered)
+        binding.appsCount.text = "${filtered.size} apps"
+        binding.emptyAppsText.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
+        if (filtered.isEmpty() && allApps.isNotEmpty()) {
+            binding.emptyAppsText.text = "No se encontraron aplicaciones para \"$trimmed\""
+        } else if (allApps.isEmpty()) {
+            binding.emptyAppsText.text = getString(R.string.apps_empty)
+        }
+    }
+
     private fun launchPcApp(app: PcApp) {
-        Toast.makeText(this, "Abriendo ${app.name} en el PC...", Toast.LENGTH_SHORT).show()
+        val isDarkMode = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        Toast.makeText(this, "Abriendo ${app.name}...", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val res = PulsarApiClient.launchApp(app.id)
+            val res = PulsarApiClient.launchApp(app.id, darkMode = isDarkMode)
             if (res.isSuccess) {
                 val broadwayUrl = res.getOrNull()
                 val intent = Intent(this@MainActivity, BroadwayActivity::class.java).apply {

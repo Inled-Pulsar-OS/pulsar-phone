@@ -3,59 +3,103 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="?attr/colorSurface">
 
     <WebView
         android:id="@+id/broadwayWebView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:visibility="invisible" />
 
-    <!-- Top floating controls pill -->
+    <!-- Material 3 Loading View: displays until Broadway app actually renders -->
     <LinearLayout
+        android:id="@+id/loadingLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/colorSurface"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:indeterminate="true"
+            app:indicatorSize="48dp"
+            app:trackThickness="4dp" />
+
+        <TextView
+            android:id="@+id/loadingAppTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Iniciando aplicación..."
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textColor="?attr/colorOnSurface" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Conectando con Broadway en el PC..."
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+    </LinearLayout>
+
+    <!-- Top floating Material 3 controls pill -->
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/floatingBar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_margin="16dp"
-        android:background="@drawable/ic_launcher_round"
-        android:backgroundTint="#CC1E293B"
-        android:elevation="8dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:padding="6dp">
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="6dp"
+        app:strokeColor="?attr/colorOutlineVariant"
+        app:strokeWidth="1dp">
 
-        <TextView
-            android:id="@+id/broadwayAppTitle"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:layout_marginEnd="8dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:maxWidth="160dp"
-            android:text="App Broadway"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp">
 
-        <ImageButton
-            android:id="@+id/btnToggleKeyboard"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/keyboard_toggle"
-            android:src="@android:drawable/ic_menu_edit"
-            app:tint="#FFFFFF" />
+            <TextView
+                android:id="@+id/broadwayAppTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:maxWidth="160dp"
+                android:text="App"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
+                android:textColor="?attr/colorOnSurface" />
 
-        <ImageButton
-            android:id="@+id/btnCloseBroadway"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/close_app"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
-            app:tint="#EF4444" />
+            <ImageButton
+                android:id="@+id/btnToggleKeyboard"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/keyboard_toggle"
+                android:src="@android:drawable/ic_menu_edit"
+                app:tint="?attr/colorOnSurface" />
 
-    </LinearLayout>
+            <ImageButton
+                android:id="@+id/btnCloseBroadway"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/close_app"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                app:tint="?attr/colorError" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
 
 </FrameLayout>

@@ -1,18 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.PulsarPhone" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/primary</item>
-        <item name="colorSecondary">@color/secondary</item>
-        <item name="android:statusBarColor">@color/background</item>
-        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
     </style>
 
     <style name="Theme.PulsarPhone.Fullscreen" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:windowFullscreen">true</item>
-        <item name="android:windowBackground">#000000</item>
+        <item name="android:windowBackground">?attr/colorSurface</item>
         <item name="android:statusBarColor">#000000</item>
     </style>
 
     <style name="Theme.PulsarPhone.Dialog" parent="Theme.Material3.DayNight.Dialog">
-        <item name="colorPrimary">@color/primary</item>
+        <item name="android:windowBackground">?attr/colorSurfaceContainer</item>
     </style>
 </resources>

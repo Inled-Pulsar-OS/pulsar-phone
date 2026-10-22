@@ -3,10 +3,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/surface"
+    android:background="?attr/colorSurfaceContainer"
     android:gravity="center"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:padding="28dp">
 
     <ImageView
         android:layout_width="48dp"
@@ -18,11 +18,10 @@
         android:id="@+id/shareTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="Enviando a FlyDrop (Pulsar OS)"
-        android:textColor="@color/on_surface"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+        android:layout_marginTop="14dp"
+        android:text="Enviando a FlyDrop"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        android:textColor="?attr/colorOnSurface" />
 
     <TextView
         android:id="@+id/shareSubtitle"
@@ -30,25 +29,24 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:text="Preparando transferencia..."
-        android:textColor="@color/secondary"
-        android:textSize="13sp" />
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?attr/colorOnSurfaceVariant" />
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/shareProgress"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="20dp"
         android:indeterminate="true"
-        app:indicatorColor="@color/primary"
-        app:trackColor="@color/surface_variant" />
+        app:indicatorColor="?attr/colorPrimary"
+        app:trackColor="?attr/colorSurfaceContainerHighest" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnCancelShare"
         style="@style/Widget.Material3.Button.TextButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="Cancelar"
-        android:textColor="@color/on_surface" />
+        android:layout_marginTop="16dp"
+        android:text="Cancelar" />
 
 </LinearLayout>

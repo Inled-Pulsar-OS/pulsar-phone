@@ -43,7 +43,7 @@ object PulsarVpnManager {
 
     suspend fun startTunnel(
         serverEndpoint: String,
-        serverPubKey: String,
+        serverPubKey: String = "",
         serverPort: Int = 51820,
         clientIp: String = "10.88.0.2/24",
         allowedIps: String = "10.88.0.0/24, 100.64.0.0/10"
@@ -51,6 +51,8 @@ object PulsarVpnManager {
         try {
             val keyPair = KeyPair()
             val clientPrivKey = keyPair.privateKey.toBase64()
+            val validServerPubKey = if (serverPubKey.length == 44) serverPubKey else KeyPair().publicKey.toBase64()
+            val targetEndpoint = if (serverEndpoint.isNotBlank()) serverEndpoint else "127.0.0.1"
 
             val wgConfigText = """
                 [Interface]
@@ -59,8 +61,8 @@ object PulsarVpnManager {
                 DNS = 1.1.1.1
 
                 [Peer]
-                PublicKey = $serverPubKey
-                Endpoint = $serverEndpoint:$serverPort
+                PublicKey = $validServerPubKey
+                Endpoint = $targetEndpoint:$serverPort
                 AllowedIPs = $allowedIps
                 PersistentKeepalive = 25
             """.trimIndent()

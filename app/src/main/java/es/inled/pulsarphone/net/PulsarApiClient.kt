@@ -72,9 +72,9 @@ object PulsarApiClient {
         }
     }
 
-    suspend fun launchApp(appId: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun launchApp(appId: String, darkMode: Boolean = true): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val json = gson.toJson(mapOf("appId" to appId))
+            val json = gson.toJson(mapOf("appId" to appId, "darkMode" to darkMode))
             val req = Request.Builder()
                 .url("${getBaseUrl()}/api/apps/launch")
                 .header("X-Pulsar-Token", getToken())
