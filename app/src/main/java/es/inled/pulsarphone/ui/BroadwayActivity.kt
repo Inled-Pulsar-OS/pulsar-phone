@@ -19,6 +19,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import es.inled.pulsarphone.PulsarPhoneApp
+import es.inled.pulsarphone.R
 import es.inled.pulsarphone.databinding.ActivityBroadwayBinding
 import es.inled.pulsarphone.net.PulsarApiClient
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +35,8 @@ class BroadwayActivity : AppCompatActivity() {
     private lateinit var binding: ActivityBroadwayBinding
     private var appName: String = "App Broadway"
     private var broadwayUrl: String = ""
-    private var zoomStep = 0 // 0: Fit (Phosh), 1: 1.5x, 2: 2.0x
+    private var isPanMode = false
+    private var zoomStep = 0 // 0: Fit, 1: 1.4x, 2: 1.8x
     private var appLoaded = false
 
     @Volatile
@@ -46,7 +48,7 @@ class BroadwayActivity : AppCompatActivity() {
         binding = ActivityBroadwayBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        appName = intent.getStringExtra(EXTRA_APP_NAME) ?: "Pulsar App"
+        appName = intent.getStringExtra(EXTRA_APP_NAME) ?: getString(R.string.app_name)
         val cfg = PulsarPhoneApp.instance.getConfig()
         val rawUrl = intent.getStringExtra(EXTRA_BROADWAY_URL) ?: ""
 
@@ -59,7 +61,7 @@ class BroadwayActivity : AppCompatActivity() {
         broadwayUrl = "http://${cfg.pcIp}:$targetPort/"
 
         binding.broadwayAppTitle.text = appName
-        binding.loadingAppTitle.text = "Iniciando $appName..."
+        binding.loadingAppTitle.text = getString(R.string.starting_app, appName)
 
         setupWebView()
         setupControls()
@@ -152,14 +154,14 @@ class BroadwayActivity : AppCompatActivity() {
                 val url = request?.url ?: return null
                 val path = url.path ?: ""
 
-                // 1. Intercept root HTML to supply scalable, Phosh-compatible viewport
+                // 1. Intercept root HTML with bounded viewport (prevents infinite zoom!)
                 if (path == "/" || path.isEmpty() || path == "/index.html") {
                     val html = buildMobileBroadwayHtml(bgColorHex)
                     val stream: InputStream = ByteArrayInputStream(html.toByteArray(StandardCharsets.UTF_8))
                     return WebResourceResponse("text/html", "UTF-8", stream)
                 }
 
-                // 2. Intercept broadway.js to enable multi-touch, pan, and adaptive scaling
+                // 2. Intercept broadway.js to enable controlled pan & zoom mode and coordinate scaling
                 if (path.endsWith("broadway.js")) {
                     val js = fetchAndPatchBroadwayJs(url.toString())
                     if (js.isNotEmpty()) {
@@ -181,7 +183,7 @@ class BroadwayActivity : AppCompatActivity() {
             <html>
             <head>
             <meta http-equiv="Content-Type" content="text/html; charset=utf8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.8, maximum-scale=2.5, user-scalable=yes">
             <title>Pulsar Broadway Mobile</title>
             <style type="text/css">
             * {
@@ -227,13 +229,13 @@ class BroadwayActivity : AppCompatActivity() {
 
         if (rawJs.isEmpty()) return ""
 
-        // Patch 1: Automatic gesture detection:
-        // When 2 or more touches: DO NOT preventDefault! Let browser natively handle pinch-to-zoom and two-finger pan at 60fps!
-        // When 1 touch: preventDefault and forward tap/drag to GTK!
+        // Patch 1: Mode selector support in touch events:
+        // When pulsarPanModeActive is true: DO NOT call preventDefault!
+        // This lets the browser pan and scroll across the canvas with 1 finger!
         val touchStartTarget = "function onTouchStart(ev) {\n    ev.preventDefault();"
         val touchStartReplacement = """
             function onTouchStart(ev) {
-                if (ev.touches && ev.touches.length > 1) {
+                if (window.pulsarPanModeActive || (ev.touches && ev.touches.length > 1)) {
                     return;
                 }
                 ev.preventDefault();
@@ -242,7 +244,7 @@ class BroadwayActivity : AppCompatActivity() {
         val touchMoveTarget = "function onTouchMove(ev) {\n    ev.preventDefault();"
         val touchMoveReplacement = """
             function onTouchMove(ev) {
-                if (ev.touches && ev.touches.length > 1) {
+                if (window.pulsarPanModeActive || (ev.touches && ev.touches.length > 1)) {
                     return;
                 }
                 ev.preventDefault();
@@ -251,7 +253,7 @@ class BroadwayActivity : AppCompatActivity() {
         val touchEndTarget = "function onTouchEnd(ev) {\n    ev.preventDefault();"
         val touchEndReplacement = """
             function onTouchEnd(ev) {
-                if (ev.touches && ev.touches.length > 0) {
+                if (window.pulsarPanModeActive || (ev.touches && ev.touches.length > 0)) {
                     return;
                 }
                 ev.preventDefault();
@@ -304,11 +306,16 @@ class BroadwayActivity : AppCompatActivity() {
             patched = patched.replace(showSurfaceTarget, showSurfaceReplacement)
         }
 
-        // Patch 5: Append mobile Phosh-style adapter script
+        // Patch 5: Append mobile Phosh-style adapter script with Pan Mode toggle
         val mobileHelperScript = """
             
             // --- Pulsar Phosh-style Linux Mobile Adapter ---
+            window.pulsarPanModeActive = false;
             window.broadwayScale = 1.0;
+
+            window.setPulsarPanMode = function(active) {
+                window.pulsarPanModeActive = !!active;
+            };
 
             window.onPulsarSurfaceUpdated = function() {
                 var vw = window.innerWidth || document.documentElement.clientWidth;
@@ -391,6 +398,10 @@ class BroadwayActivity : AppCompatActivity() {
             closeAndExit()
         }
 
+        binding.btnToggleMode.setOnClickListener {
+            toggleInteractionMode()
+        }
+
         binding.btnToggleZoom.setOnClickListener {
             cycleZoom()
         }
@@ -401,7 +412,20 @@ class BroadwayActivity : AppCompatActivity() {
             binding.broadwayWebView.evaluateJavascript(
                 "if (typeof fakeInput !== 'undefined' && fakeInput) { fakeInput.focus(); }", null
             )
-            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
+            imm.showSoftInput(binding.broadwayWebView, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    private fun toggleInteractionMode() {
+        isPanMode = !isPanMode
+        if (isPanMode) {
+            binding.btnToggleMode.setImageResource(R.drawable.ic_pan_hand)
+            binding.broadwayWebView.evaluateJavascript("window.setPulsarPanMode(true);", null)
+            Toast.makeText(this, getString(R.string.mode_pan_toast), Toast.LENGTH_SHORT).show()
+        } else {
+            binding.btnToggleMode.setImageResource(R.drawable.ic_touch_pointer)
+            binding.broadwayWebView.evaluateJavascript("window.setPulsarPanMode(false);", null)
+            Toast.makeText(this, getString(R.string.mode_touch_toast), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -412,21 +436,21 @@ class BroadwayActivity : AppCompatActivity() {
                 // Reset to Phosh Mobile Fit
                 binding.broadwayWebView.zoomOut()
                 binding.broadwayWebView.evaluateJavascript("if (window.onPulsarSurfaceUpdated) window.onPulsarSurfaceUpdated();", null)
-                Toast.makeText(this, "Ajuste móvil Phosh (100% ancho)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.zoom_fit_toast), Toast.LENGTH_SHORT).show()
             }
             1 -> {
                 binding.broadwayWebView.zoomIn()
-                Toast.makeText(this, "Zoom 1.5x", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.zoom_in_toast), Toast.LENGTH_SHORT).show()
             }
             2 -> {
                 binding.broadwayWebView.zoomIn()
-                Toast.makeText(this, "Zoom 2.0x", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.zoom_detail_toast), Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     private fun closeAndExit() {
-        Toast.makeText(this, "Cerrando $appName...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.closing_app, appName), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             PulsarApiClient.closeApp()
             finish()

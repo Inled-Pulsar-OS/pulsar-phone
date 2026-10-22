@@ -33,15 +33,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:text="Iniciando aplicación..."
+            android:text="@string/loading_app_default"
             android:textAppearance="?attr/textAppearanceTitleMedium"
             android:textColor="?attr/colorOnSurface" />
 
         <TextView
+            android:id="@+id/loadingAppSubtitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="Conectando con Broadway en el PC..."
+            android:text="@string/connecting_broadway"
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -75,10 +76,20 @@
                 android:layout_marginEnd="6dp"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:maxWidth="140dp"
+                android:maxWidth="130dp"
                 android:text="App"
                 android:textAppearance="?attr/textAppearanceLabelMedium"
                 android:textColor="?attr/colorOnSurface" />
+
+            <!-- Mode Selector: Select / Click vs Pan / Zoom -->
+            <ImageButton
+                android:id="@+id/btnToggleMode"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/interaction_mode"
+                android:src="@drawable/ic_touch_pointer"
+                app:tint="?attr/colorOnSurface" />
 
             <!-- Toggle Zoom Level / Reset Fit -->
             <ImageButton
@@ -86,7 +97,7 @@
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Zoom"
+                android:contentDescription="@string/zoom_label"
                 android:src="@drawable/ic_zoom_fit"
                 app:tint="?attr/colorOnSurface" />
 

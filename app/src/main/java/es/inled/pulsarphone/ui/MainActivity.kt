@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity() {
         if (result.resultCode == RESULT_OK) {
             startInternalVpn()
         } else {
-            Toast.makeText(this, "Permiso de VPN no concedido", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.vpn_permission_denied), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -129,38 +129,38 @@ class MainActivity : AppCompatActivity() {
     private fun updateNotificationSyncButton() {
         val granted = isNotificationAccessGranted()
         if (granted) {
-            binding.btnNotificationSync.text = "🔔 Notificaciones: Activas (Toca para probar)"
+            binding.btnNotificationSync.text = getString(R.string.notifications_active_test)
             binding.btnNotificationSync.setIconResource(android.R.drawable.ic_dialog_info)
             binding.btnNotificationSync.setOnClickListener {
                 lifecycleScope.launch {
                     val res = PulsarApiClient.sendNotification(
                         es.inled.pulsarphone.data.NotificationPayload(
                             appName = "Pulsar Phone",
-                            title = "Sincronización de Notificaciones",
-                            text = "¡Las notificaciones de tu teléfono están activas y sincronizadas con Pulsar OS!",
+                            title = "Pulsar Phone",
+                            text = getString(R.string.test_notification_sent),
                             packageName = packageName
                         )
                     )
                     if (res.isSuccess) {
-                        Toast.makeText(this@MainActivity, "Notificación enviada al PC", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.test_notification_sent), Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this@MainActivity, "Error enviando notificación: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.error_sending, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_SHORT).show()
                     }
                 }
             }
         } else {
-            binding.btnNotificationSync.text = "🔔 Activar Notificaciones (Permiso)"
+            binding.btnNotificationSync.text = getString(R.string.notifications_permission_prompt)
             binding.btnNotificationSync.setIconResource(android.R.drawable.ic_lock_idle_alarm)
             binding.btnNotificationSync.setOnClickListener {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                Toast.makeText(this, "Permite el acceso a notificaciones para sincronizar con tu PC", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.grant_notification_permission), Toast.LENGTH_LONG).show()
             }
         }
     }
 
     private fun startQrScanner() {
         val options = ScanOptions().apply {
-            setPrompt("Apunta al código QR en Pulsar VPN en tu PC")
+            setPrompt(getString(R.string.scan_qr_prompt))
             setBeepEnabled(true)
             setOrientationLocked(false)
             setBarcodeImageEnabled(false)
@@ -184,13 +184,13 @@ class MainActivity : AppCompatActivity() {
                     pcAlias = alias
                 )
                 PulsarPhoneApp.instance.saveConfig(cfg)
-                Toast.makeText(this, "¡PC vinculado con éxito! ($alias)", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.pc_paired_success, alias), Toast.LENGTH_LONG).show()
                 refreshStatusAndApps()
                 return
             }
         }
 
-        Toast.makeText(this, "Código QR leído: $content", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, content, Toast.LENGTH_SHORT).show()
     }
 
     private fun handleDeepLink(intent: Intent) {
@@ -234,7 +234,7 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     PulsarVpnManager.stopTunnel()
                     updateVpnButtonState()
-                    Toast.makeText(this@MainActivity, "VPN Desconectada", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.vpn_disconnected_toast), Toast.LENGTH_SHORT).show()
                 }
             } else {
                 // If system Tailscale VPN is active, open Tailscale to toggle
@@ -245,7 +245,7 @@ class MainActivity : AppCompatActivity() {
                     try {
                         startActivity(Intent("android.net.vpn.SETTINGS"))
                     } catch (e: Exception) {
-                        Toast.makeText(this, "VPN Activa a través del sistema", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.vpn_active_system), Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -269,12 +269,12 @@ class MainActivity : AppCompatActivity() {
     private fun startInternalVpn() {
         val cfg = PulsarPhoneApp.instance.getConfig()
         if (!PulsarPhoneApp.instance.isConfigured()) {
-            Toast.makeText(this, "Primero vincula tu PC escaneando el código QR", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.pair_first_prompt), Toast.LENGTH_SHORT).show()
             return
         }
 
         lifecycleScope.launch {
-            Toast.makeText(this@MainActivity, "Iniciando VPN segura...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@MainActivity, getString(R.string.starting_vpn), Toast.LENGTH_SHORT).show()
             val res = PulsarVpnManager.startTunnel(
                 serverEndpoint = cfg.pcIp,
                 serverPubKey = "",
@@ -282,10 +282,10 @@ class MainActivity : AppCompatActivity() {
             )
             updateVpnButtonState()
             if (res.isSuccess) {
-                Toast.makeText(this@MainActivity, "VPN Conectada a ${cfg.pcAlias}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, getString(R.string.vpn_connected_to, cfg.pcAlias), Toast.LENGTH_SHORT).show()
             } else {
-                val err = res.exceptionOrNull()?.message ?: "Error desconocido"
-                Toast.makeText(this@MainActivity, "Error al iniciar VPN: $err", Toast.LENGTH_LONG).show()
+                val err = res.exceptionOrNull()?.message ?: ""
+                Toast.makeText(this@MainActivity, getString(R.string.vpn_start_error, err), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -293,9 +293,9 @@ class MainActivity : AppCompatActivity() {
     private fun updateVpnButtonState() {
         val isRealVpn = isRealVpnActive() || PulsarVpnManager.isVpnRunning()
         if (isRealVpn) {
-            binding.btnToggleVpn.text = "VPN: Activa"
+            binding.btnToggleVpn.text = getString(R.string.vpn_status_active)
         } else {
-            binding.btnToggleVpn.text = "VPN: Inactiva"
+            binding.btnToggleVpn.text = getString(R.string.vpn_status_inactive)
         }
     }
 
@@ -307,10 +307,10 @@ class MainActivity : AppCompatActivity() {
             binding.statusIndicator.backgroundTintList =
                 ContextCompat.getColorStateList(this, R.color.status_disconnected)
             binding.statusText.text = getString(R.string.vpn_disconnected)
-            binding.pcInfoText.text = "Pulsa 'Escanear QR' para vincular con tu PC"
+            binding.pcInfoText.text = getString(R.string.scan_qr_to_pair)
             binding.emptyAppsText.visibility = View.VISIBLE
-            binding.emptyAppsText.text = "Escanea el código QR de Pulsar VPN en tu PC para ver tus aplicaciones"
-            binding.appsCount.text = "0 apps"
+            binding.emptyAppsText.text = getString(R.string.scan_qr_to_see_apps)
+            binding.appsCount.text = getString(R.string.apps_count_format, 0)
             adapter.setApps(emptyList())
             binding.swipeRefresh.isRefreshing = false
             return
@@ -321,8 +321,8 @@ class MainActivity : AppCompatActivity() {
             if (isOnline) {
                 binding.statusIndicator.backgroundTintList =
                     ContextCompat.getColorStateList(this@MainActivity, R.color.status_connected)
-                binding.statusText.text = "${cfg.pcAlias} (Conectado)"
-                binding.pcInfoText.text = "IP: ${cfg.pcIp} • Túnel Seguro Activo"
+                binding.statusText.text = getString(R.string.pc_connected_status, cfg.pcAlias)
+                binding.pcInfoText.text = getString(R.string.secure_tunnel_active, cfg.pcIp)
 
                 val appsResult = PulsarApiClient.getApps()
                 binding.swipeRefresh.isRefreshing = false
@@ -335,13 +335,13 @@ class MainActivity : AppCompatActivity() {
                     allApps = emptyList()
                     filterApps("")
                     binding.emptyAppsText.visibility = View.VISIBLE
-                    binding.emptyAppsText.text = "Error al obtener aplicaciones del PC"
+                    binding.emptyAppsText.text = getString(R.string.error_fetching_apps)
                 }
             } else {
                 binding.statusIndicator.backgroundTintList =
                     ContextCompat.getColorStateList(this@MainActivity, R.color.status_disconnected)
-                binding.statusText.text = "${cfg.pcAlias} (Sin respuesta)"
-                binding.pcInfoText.text = "Comprueba que Pulsar VPN esté abierto en tu PC (${cfg.pcIp})"
+                binding.statusText.text = getString(R.string.pc_unresponsive_status, cfg.pcAlias)
+                binding.pcInfoText.text = getString(R.string.check_pulsar_vpn_open, cfg.pcIp)
                 binding.swipeRefresh.isRefreshing = false
                 allApps = emptyList()
                 filterApps("")
@@ -360,10 +360,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
         adapter.setApps(filtered)
-        binding.appsCount.text = "${filtered.size} apps"
+        binding.appsCount.text = getString(R.string.apps_count_format, filtered.size)
         binding.emptyAppsText.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
         if (filtered.isEmpty() && allApps.isNotEmpty()) {
-            binding.emptyAppsText.text = "No se encontraron aplicaciones para \"$trimmed\""
+            binding.emptyAppsText.text = getString(R.string.no_apps_found_for, trimmed)
         } else if (allApps.isEmpty()) {
             binding.emptyAppsText.text = getString(R.string.apps_empty)
         }
@@ -371,7 +371,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun launchPcApp(app: PcApp) {
         val isDarkMode = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
-        Toast.makeText(this, "Abriendo ${app.name}...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.opening_app, app.name), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val res = PulsarApiClient.launchApp(app.id, darkMode = isDarkMode)
             if (res.isSuccess) {
@@ -382,7 +382,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 startActivity(intent)
             } else {
-                Toast.makeText(this@MainActivity, "Error al lanzar app: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, getString(R.string.error_launching_app, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -396,16 +396,16 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     val res = PulsarApiClient.syncClipboardToPc(text)
                     if (res.isSuccess) {
-                        Toast.makeText(this@MainActivity, "Portapapeles enviado al PC", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.clipboard_sent_to_pc), Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this@MainActivity, "Error al sincronizar portapapeles", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.clipboard_sync_error), Toast.LENGTH_SHORT).show()
                     }
                 }
             } else {
-                Toast.makeText(this, "El portapapeles está vacío", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.clipboard_empty), Toast.LENGTH_SHORT).show()
             }
         } else {
-            Toast.makeText(this, "El portapapeles está vacío", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.clipboard_empty), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -417,7 +417,7 @@ class MainActivity : AppCompatActivity() {
             }
             startActivity(intent)
         } catch (e: Exception) {
-            Toast.makeText(this, "Abre la app 'Archivos' de Android para ver el PC", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.open_files_app_hint), Toast.LENGTH_LONG).show()
         }
     }
 }

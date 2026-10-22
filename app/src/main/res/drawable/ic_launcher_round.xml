@@ -5,7 +5,7 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Edge-to-edge full bleed background (occupies full 108x108, zero white border) -->
+    <!-- Edge-to-edge full bleed background with Pulsar Adblocker gradient (#3584e4 -> #9141ac -> #e01b24) -->
     <path
         android:pathData="M0,0 L108,0 L108,108 L0,108 Z">
         <aapt:attr name="android:fillColor">
@@ -15,90 +15,35 @@
                 android:endX="108"
                 android:endY="108"
                 android:type="linear">
-                <item android:color="#181926" android:offset="0.0"/>
-                <item android:color="#241b3d" android:offset="0.5"/>
-                <item android:color="#0f172a" android:offset="1.0"/>
+                <item android:color="#3584e4" android:offset="0.0"/>
+                <item android:color="#9141ac" android:offset="0.5"/>
+                <item android:color="#e01b24" android:offset="1.0"/>
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Ambient glowing circle behind the phone -->
+    <!-- Lucide Smartphone Icon - Scaled to fill the icon prominently -->
+    <!-- Outer phone body (Lucide rect rx="2" ry="2" scaled) -->
     <path
-        android:pathData="M54,54 m-36,0 a36,36 0 1,1 72,0 a36,36 0 1,1 -72,0">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="18"
-                android:startY="18"
-                android:endX="90"
-                android:endY="90"
-                android:type="radial"
-                android:gradientRadius="36">
-                <item android:color="#503b82f6" android:offset="0.0"/>
-                <item android:color="#308b5cf6" android:offset="0.6"/>
-                <item android:color="#00000000" android:offset="1.0"/>
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Phone outer body (Chassis) -->
-    <path
-        android:fillColor="#1e1e2e"
-        android:strokeColor="#5c6370"
-        android:strokeWidth="1.5"
-        android:pathData="M40,16 L68,16 A10,10 0 0,1 78,26 L78,82 A10,10 0 0,1 68,92 L40,92 A10,10 0 0,1 30,82 L30,26 A10,10 0 0,1 40,16 Z"/>
-
-    <!-- Phone Screen with vibrant Pulsar display -->
-    <path
-        android:pathData="M40,20 L68,20 A7,7 0 0,1 75,27 L75,81 A7,7 0 0,1 68,88 L40,88 A7,7 0 0,1 33,81 L33,27 A7,7 0 0,1 40,20 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="33"
-                android:startY="20"
-                android:endX="75"
-                android:endY="88"
-                android:type="linear">
-                <item android:color="#3b82f6" android:offset="0.0"/>
-                <item android:color="#8b5cf6" android:offset="0.55"/>
-                <item android:color="#ec4899" android:offset="1.0"/>
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Screen highlight / glass reflection sheen -->
-    <path
-        android:fillColor="#22ffffff"
-        android:pathData="M33,27 L75,20 L75,46 L33,58 Z"/>
-
-    <!-- Dynamic Pulsar connection orbit / pulse inside phone display -->
-    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
         android:fillColor="#00000000"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.5"
-        android:strokeLineCap="round"
-        android:pathData="M44,54 A10,10 0 0,1 64,54 A10,10 0 0,1 44,54"/>
+        android:pathData="M38,18 L70,18 A9,9 0 0,1 79,27 L79,81 A9,9 0 0,1 70,90 L38,90 A9,9 0 0,1 29,81 L29,27 A9,9 0 0,1 38,18 Z"/>
 
-    <!-- Central Pulsar Core Star -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,49 L55.5,52.5 L59,54 L55.5,55.5 L54,59 L52.5,55.5 L49,54 L52.5,52.5 Z"/>
-
-    <!-- Top Speaker Ear-piece slit -->
-    <path
-        android:strokeColor="#a0a0b0"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round"
-        android:pathData="M50,18.5 L58,18.5"/>
-
-    <!-- Front Camera punch-hole -->
-    <path
-        android:fillColor="#000000"
-        android:pathData="M54,23.5 m-1.2,0 a1.2,1.2 0 1,1 2.4,0 a1.2,1.2 0 1,1 -2.4,0"/>
-
-    <!-- Bottom Home gesture bar -->
+    <!-- Lucide Speaker / Camera Top Slit -->
     <path
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2"
+        android:strokeWidth="3.5"
         android:strokeLineCap="round"
-        android:pathData="M48,84.5 L60,84.5"/>
+        android:pathData="M49,27 L59,27"/>
+
+    <!-- Lucide Home Indicator / Navigation Dot (M12 18h.01) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,81 L54.01,81"/>
 
 </vector>

@@ -85,7 +85,7 @@
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Escanear QR" />
+                            android:text="@string/btn_scan_qr" />
 
                     </LinearLayout>
 
@@ -94,7 +94,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="IP: No conectado • Red WireGuard"
+                        android:text="@string/vpn_disconnected"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -112,7 +112,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginEnd="4dp"
                             android:layout_weight="1"
-                            android:text="VPN" />
+                            android:text="@string/btn_vpn" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnClipboardSync"
@@ -122,7 +122,7 @@
                             android:layout_marginStart="4dp"
                             android:layout_marginEnd="4dp"
                             android:layout_weight="1"
-                            android:text="Portapapeles" />
+                            android:text="@string/btn_clipboard" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnMountFiles"
@@ -131,7 +131,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="4dp"
                             android:layout_weight="1"
-                            android:text="Archivos" />
+                            android:text="@string/btn_files" />
 
                     </LinearLayout>
 
@@ -142,7 +142,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Sincronizar Notificaciones" />
+                        android:text="@string/notifications_permission_prompt" />
 
                 </LinearLayout>
 
@@ -178,7 +178,7 @@
                         android:layout_height="match_parent"
                         android:layout_weight="1"
                         android:background="@null"
-                        android:hint="Buscar aplicaciones..."
+                        android:hint="@string/search_apps_hint"
                         android:imeOptions="actionSearch"
                         android:inputType="text"
                         android:maxLines="1"

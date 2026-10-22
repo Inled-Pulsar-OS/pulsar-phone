@@ -26,7 +26,7 @@ class ShareActivity : AppCompatActivity() {
         }
 
         if (!PulsarPhoneApp.instance.isConfigured()) {
-            Toast.makeText(this, "Pulsar Phone no está vinculado a ningún PC", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(es.inled.pulsarphone.R.string.pc_not_paired), Toast.LENGTH_LONG).show()
             finish()
             return
         }
@@ -65,13 +65,13 @@ class ShareActivity : AppCompatActivity() {
     }
 
     private fun sendText(text: String) {
-        binding.shareSubtitle.text = "Enviando texto al portapapeles de FlyDrop..."
+        binding.shareSubtitle.text = getString(es.inled.pulsarphone.R.string.sending_text_clipboard)
         lifecycleScope.launch {
             val res = FlydropClient.sendTextToFlydrop(text)
             if (res.isSuccess) {
-                Toast.makeText(this@ShareActivity, "Texto enviado a Pulsar OS", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@ShareActivity, getString(es.inled.pulsarphone.R.string.text_sent_success), Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this@ShareActivity, "Error al enviar: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@ShareActivity, getString(es.inled.pulsarphone.R.string.error_sending, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_LONG).show()
             }
             finish()
         }
@@ -79,7 +79,7 @@ class ShareActivity : AppCompatActivity() {
 
     private fun sendSingleFile(uri: Uri, mimeType: String) {
         val (name, size) = getFileMeta(uri)
-        binding.shareSubtitle.text = "Enviando $name (${formatSize(size)})..."
+        binding.shareSubtitle.text = getString(es.inled.pulsarphone.R.string.sending_file, name, formatSize(size))
 
         lifecycleScope.launch {
             val res = FlydropClient.sendFileToFlydrop(
@@ -94,26 +94,26 @@ class ShareActivity : AppCompatActivity() {
             }
 
             if (res.isSuccess) {
-                Toast.makeText(this@ShareActivity, "Archivo '$name' enviado a FlyDrop", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@ShareActivity, getString(es.inled.pulsarphone.R.string.file_sent_success, name), Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this@ShareActivity, "Error en transferencia: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@ShareActivity, getString(es.inled.pulsarphone.R.string.error_sending, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_LONG).show()
             }
             finish()
         }
     }
 
     private fun sendMultipleFiles(uris: List<Uri>) {
-        binding.shareSubtitle.text = "Enviando ${uris.size} archivos..."
+        binding.shareSubtitle.text = getString(es.inled.pulsarphone.R.string.sending_multiple_files, uris.size)
         lifecycleScope.launch {
             var sent = 0
             for (uri in uris) {
                 val (name, size) = getFileMeta(uri)
                 val mime = contentResolver.getType(uri) ?: "application/octet-stream"
-                binding.shareSubtitle.text = "Enviando ($sent/${uris.size}) $name..."
+                binding.shareSubtitle.text = getString(es.inled.pulsarphone.R.string.sending_file, name, formatSize(size))
                 val res = FlydropClient.sendFileToFlydrop(this@ShareActivity, uri, name, mime, size)
                 if (res.isSuccess) sent++
             }
-            Toast.makeText(this@ShareActivity, "$sent/${uris.size} archivos enviados a FlyDrop", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@ShareActivity, getString(es.inled.pulsarphone.R.string.multiple_files_sent_success, sent, uris.size), Toast.LENGTH_SHORT).show()
             finish()
         }
     }
