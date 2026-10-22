@@ -52,4 +52,10 @@ dependencies {
     // HTTP Client & JSON
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // QR Code Scanner
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+
+    // Embedded WireGuard Tunnel VPN Engine
+    implementation("com.wireguard.android:tunnel:1.0.20230706")
 }

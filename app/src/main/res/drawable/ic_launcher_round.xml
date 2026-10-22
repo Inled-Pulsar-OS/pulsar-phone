@@ -1,15 +1,57 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Pulsar OS Gradient Squircle Background -->
     <path
-        android:fillColor="#0284C7"
-        android:pathData="M54,0 C24.18,0 0,24.18 0,54 C0,83.82 24.18,108 54,108 C83.82,108 108,83.82 108,54 C108,24.18 83.82,0 54,0 Z"/>
+        android:pathData="M24,12 L84,12 A12,12 0 0,1 96,24 L96,84 A12,12 0 0,1 84,96 L24,96 A12,12 0 0,1 12,84 L12,24 A12,12 0 0,1 24,12 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="12"
+                android:startY="12"
+                android:endX="96"
+                android:endY="96"
+                android:type="linear">
+                <item android:color="#3584e4" android:offset="0.0"/>
+                <item android:color="#9141ac" android:offset="0.5"/>
+                <item android:color="#e01b24" android:offset="1.0"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Lucide Wi-Fi Icon (scale 2.4, translated to center) -->
+    <!-- Dot at bottom -->
     <path
-        android:fillColor="#38BDF8"
-        android:pathData="M54,18 C34,18 18,34 18,54 C18,74 34,90 54,90 C74,90 90,74 90,54 C90,34 74,18 54,18 Z"/>
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,73 L54.01,73"/>
+
+    <!-- Inner Arc -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,30 L68,44 L54,58 L40,44 Z M54,58 L68,72 L54,86 L40,72 Z"/>
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M45.6,64.4 A12,12 0 0,1 62.4,64.4"/>
+
+    <!-- Middle Arc -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M37.2,55.8 A24,24 0 0,1 70.8,55.8"/>
+
+    <!-- Outer Arc -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M30,46.2 A36,36 0 0,1 78,46.2"/>
+
 </vector>

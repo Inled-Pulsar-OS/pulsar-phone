@@ -13,6 +13,7 @@ class PulsarPhoneApp : Application() {
         super.onCreate()
         instance = this
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        es.inled.pulsarphone.net.PulsarVpnManager.init(this)
     }
 
     fun isConfigured(): Boolean {
