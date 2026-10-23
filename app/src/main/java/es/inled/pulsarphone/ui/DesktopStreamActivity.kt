@@ -1,8 +1,6 @@
 package es.inled.pulsarphone.ui
 
 import android.annotation.SuppressLint
-import android.media.AudioAttributes
-import android.media.MediaPlayer
 import android.os.Bundle
 import android.view.View
 import android.webkit.WebChromeClient
@@ -20,14 +18,11 @@ import es.inled.pulsarphone.R
 import es.inled.pulsarphone.data.PcMonitor
 import es.inled.pulsarphone.databinding.ActivityDesktopStreamBinding
 import es.inled.pulsarphone.net.PulsarApiClient
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class DesktopStreamActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityDesktopStreamBinding
-    private var mediaPlayer: MediaPlayer? = null
     private var availableMonitors: List<PcMonitor> = emptyList()
     private var currentConnector: String? = null
 
@@ -99,7 +94,6 @@ class DesktopStreamActivity : AppCompatActivity() {
             }
 
             binding.desktopWebView.loadUrl(viewUrl)
-            startAudioStream()
         }
     }
 
@@ -157,54 +151,7 @@ class DesktopStreamActivity : AppCompatActivity() {
         }
     }
 
-    private fun startAudioStream() {
-        stopAudioStream()
-        val cfg = PulsarPhoneApp.instance.getConfig()
-        val audioUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/audio.mp3?token=${cfg.token}"
-        try {
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build()
-                )
-                setDataSource(audioUrl)
-                setOnPreparedListener { mp ->
-                    mp.start()
-                }
-                setOnErrorListener { _, _, _ ->
-                    true
-                }
-                prepareAsync()
-            }
-        } catch (e: Exception) {
-            // Audio init fallback
-        }
-    }
-
-    private fun stopAudioStream() {
-        try {
-            mediaPlayer?.stop()
-            mediaPlayer?.release()
-        } catch (e: Exception) {}
-        mediaPlayer = null
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (mediaPlayer == null) {
-            startAudioStream()
-        }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        stopAudioStream()
-    }
-
     override fun onDestroy() {
-        stopAudioStream()
         try {
             binding.desktopWebView.loadUrl("about:blank")
             binding.desktopWebView.destroy()
