@@ -43,3 +43,10 @@ data class NotificationPayload(
     @SerializedName("text") val text: String,
     @SerializedName("packageName") val packageName: String
 )
+
+data class PcMonitor(
+    @SerializedName("connector") val connector: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("isPrimary") val isPrimary: Boolean = false,
+    @SerializedName("isBuiltin") val isBuiltin: Boolean = false
+)

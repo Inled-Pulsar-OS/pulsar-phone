@@ -82,4 +82,10 @@
     <string name="btn_send">Send</string>
     <string name="btn_notifications">Notifications</string>
     <string name="close_keyboard">Close keyboard</string>
+    <string name="cast_mode_dialog_title">PC Cast Display Mode</string>
+    <string name="cast_mode_fullscreen">Fullscreen</string>
+    <string name="cast_mode_windowed">Windowed</string>
+    <string name="select_monitor_title">Select PC Display</string>
+    <string name="monitor_primary_badge">%1$s (Primary)</string>
+    <string name="monitor_switched">Switching to %1$s...</string>
 </resources>

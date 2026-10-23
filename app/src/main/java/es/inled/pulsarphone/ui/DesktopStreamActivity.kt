@@ -1,7 +1,8 @@
 package es.inled.pulsarphone.ui
 
 import android.annotation.SuppressLint
-import android.graphics.Bitmap
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.view.View
 import android.webkit.WebChromeClient
@@ -13,24 +14,22 @@ import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import es.inled.pulsarphone.PulsarPhoneApp
+import es.inled.pulsarphone.R
+import es.inled.pulsarphone.data.PcMonitor
 import es.inled.pulsarphone.databinding.ActivityDesktopStreamBinding
+import es.inled.pulsarphone.net.PulsarApiClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import java.util.concurrent.TimeUnit
 
 class DesktopStreamActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityDesktopStreamBinding
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .build()
+    private var mediaPlayer: MediaPlayer? = null
+    private var availableMonitors: List<PcMonitor> = emptyList()
+    private var currentConnector: String? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,6 +43,7 @@ class DesktopStreamActivity : AppCompatActivity() {
 
         setupWebView()
         startPcStream()
+        loadMonitors()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -77,7 +77,7 @@ class DesktopStreamActivity : AppCompatActivity() {
                 if (request?.isForMainFrame == true) {
                     Toast.makeText(
                         this@DesktopStreamActivity,
-                        "Error al conectar con la transmisión del PC",
+                        getString(R.string.check_pulsar_vpn_open, PulsarPhoneApp.instance.getConfig().pcIp),
                         Toast.LENGTH_SHORT
                     ).show()
                     binding.streamLoadingLayout.visibility = View.GONE
@@ -88,27 +88,123 @@ class DesktopStreamActivity : AppCompatActivity() {
 
     private fun startPcStream() {
         val cfg = PulsarPhoneApp.instance.getConfig()
-        val viewUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/view?token=${cfg.token}"
+        val monParam = if (currentConnector != null) "&monitor=$currentConnector" else ""
+        val viewUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/view?token=${cfg.token}$monParam"
 
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    val req = Request.Builder()
-                        .url("http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/start")
-                        .addHeader("X-Pulsar-Token", cfg.token)
-                        .post("{}".toRequestBody("application/json".toMediaType()))
-                        .build()
-                    client.newCall(req).execute().close()
-                }
+                PulsarApiClient.startPcDesktopStream(currentConnector)
             } catch (e: Exception) {
-                // Ignore, server will start on request
+                // Ignore, server starts on request
             }
 
+            binding.desktopWebView.loadUrl(viewUrl)
+            startAudioStream()
+        }
+    }
+
+    private fun loadMonitors() {
+        lifecycleScope.launch {
+            val res = PulsarApiClient.getMonitors()
+            if (res.isSuccess) {
+                availableMonitors = res.getOrDefault(emptyList())
+                if (availableMonitors.size > 1) {
+                    binding.btnSelectMonitor.visibility = View.VISIBLE
+                    binding.btnSelectMonitor.setOnClickListener {
+                        showMonitorSelectionDialog()
+                    }
+                    val primary = availableMonitors.find { it.isPrimary } ?: availableMonitors.firstOrNull()
+                    if (primary != null && currentConnector == null) {
+                        currentConnector = primary.connector
+                        binding.tvStreamTitle.text = primary.name
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showMonitorSelectionDialog() {
+        if (availableMonitors.isEmpty()) return
+        val items = availableMonitors.map { m ->
+            if (m.isPrimary) {
+                getString(R.string.monitor_primary_badge, m.name)
+            } else {
+                m.name
+            }
+        }.toTypedArray()
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.select_monitor_title)
+            .setItems(items) { _, which ->
+                val selected = availableMonitors[which]
+                switchMonitor(selected)
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    private fun switchMonitor(monitor: PcMonitor) {
+        currentConnector = monitor.connector
+        binding.tvStreamTitle.text = monitor.name
+        Toast.makeText(this, getString(R.string.monitor_switched, monitor.name), Toast.LENGTH_SHORT).show()
+        binding.streamLoadingLayout.visibility = View.VISIBLE
+
+        val cfg = PulsarPhoneApp.instance.getConfig()
+        lifecycleScope.launch {
+            PulsarApiClient.startPcDesktopStream(monitor.connector)
+            val viewUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/view?token=${cfg.token}&monitor=${monitor.connector}&t=${System.currentTimeMillis()}"
             binding.desktopWebView.loadUrl(viewUrl)
         }
     }
 
+    private fun startAudioStream() {
+        stopAudioStream()
+        val cfg = PulsarPhoneApp.instance.getConfig()
+        val audioUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/audio.mp3?token=${cfg.token}"
+        try {
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build()
+                )
+                setDataSource(audioUrl)
+                setOnPreparedListener { mp ->
+                    mp.start()
+                }
+                setOnErrorListener { _, _, _ ->
+                    true
+                }
+                prepareAsync()
+            }
+        } catch (e: Exception) {
+            // Audio init fallback
+        }
+    }
+
+    private fun stopAudioStream() {
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+        } catch (e: Exception) {}
+        mediaPlayer = null
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (mediaPlayer == null) {
+            startAudioStream()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopAudioStream()
+    }
+
     override fun onDestroy() {
+        stopAudioStream()
         try {
             binding.desktopWebView.loadUrl("about:blank")
             binding.desktopWebView.destroy()

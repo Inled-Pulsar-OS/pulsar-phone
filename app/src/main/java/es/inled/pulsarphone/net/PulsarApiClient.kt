@@ -7,13 +7,19 @@ import es.inled.pulsarphone.data.FsItem
 import es.inled.pulsarphone.data.FsRoot
 import es.inled.pulsarphone.data.NotificationPayload
 import es.inled.pulsarphone.data.PcApp
+import es.inled.pulsarphone.data.PcMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.InputStream
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
 object PulsarApiClient {
@@ -22,7 +28,7 @@ object PulsarApiClient {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
+        .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
@@ -37,16 +43,157 @@ object PulsarApiClient {
     }
 
     suspend fun ping(): Boolean = withContext(Dispatchers.IO) {
+        val currentCfg = PulsarPhoneApp.instance.getConfig()
+        if (rawPing(currentCfg.pcIp, currentCfg.pcPort)) {
+            return@withContext true
+        }
+
+        // Current IP unreachable - attempt auto-discovery over UDP broadcast
+        val discoveredIp = discoverPcIp(currentCfg.token)
+        if (discoveredIp != null) {
+            if (rawPing(discoveredIp, currentCfg.pcPort)) {
+                PulsarPhoneApp.instance.saveConfig(currentCfg.copy(pcIp = discoveredIp))
+                return@withContext true
+            }
+        }
+        false
+    }
+
+    private fun rawPing(ip: String, port: Int): Boolean {
+        if (ip.isBlank()) return false
+        return try {
+            val req = Request.Builder()
+                .url("http://$ip:$port/api/ping")
+                .get()
+                .build()
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun discoverPcIp(expectedToken: String): String? {
+        var socket: DatagramSocket? = null
+        try {
+            socket = DatagramSocket().apply {
+                broadcast = true
+                soTimeout = 1500
+            }
+            val msg = "PULSAR_DISCOVER".toByteArray()
+            val broadcastAddr = InetAddress.getByName("255.255.255.255")
+            val packet = DatagramPacket(msg, msg.size, broadcastAddr, 8989)
+            socket.send(packet)
+
+            val buf = ByteArray(2048)
+            val recvPacket = DatagramPacket(buf, buf.size)
+            socket.receive(recvPacket)
+
+            val jsonStr = String(recvPacket.data, 0, recvPacket.length)
+            val json = JSONObject(jsonStr)
+            val token = json.optString("token")
+            val lanIp = json.optString("lanIp")
+            val tailscaleIp = json.optString("tailscaleIp")
+            val packetIp = recvPacket.address?.hostAddress
+
+            // Check token if we already have one configured
+            if (expectedToken.isNotBlank() && token.isNotBlank() && expectedToken != token) {
+                return null
+            }
+
+            // Test candidate IPs
+            val candidates = listOfNotNull(
+                lanIp.takeIf { it.isNotBlank() },
+                packetIp?.takeIf { it.isNotBlank() },
+                tailscaleIp.takeIf { it.isNotBlank() }
+            )
+            for (candidate in candidates) {
+                if (rawPing(candidate, 8989)) {
+                    return candidate
+                }
+            }
+        } catch (e: Exception) {
+            // Discovery timeout or network unreachable
+        } finally {
+            socket?.close()
+        }
+        return null
+    }
+
+    suspend fun getMonitors(): Result<List<PcMonitor>> = withContext(Dispatchers.IO) {
         try {
             val req = Request.Builder()
-                .url("${getBaseUrl()}/api/ping")
+                .url("${getBaseUrl()}/api/stream/pc-to-phone/monitors")
+                .header("X-Pulsar-Token", getToken())
                 .get()
                 .build()
             client.newCall(req).execute().use { resp ->
-                resp.isSuccessful
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                val body = resp.body?.string().orEmpty()
+                val json = JSONObject(body)
+                val arr = json.optJSONArray("monitors") ?: JSONArray()
+                val list = mutableListOf<PcMonitor>()
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    list.add(
+                        PcMonitor(
+                            connector = obj.optString("connector"),
+                            name = obj.optString("name"),
+                            isPrimary = obj.optBoolean("isPrimary", false),
+                            isBuiltin = obj.optBoolean("isBuiltin", false)
+                        )
+                    )
+                }
+                Result.success(list)
             }
         } catch (e: Exception) {
-            false
+            Result.failure(e)
+        }
+    }
+
+    suspend fun startPcDesktopStream(monitor: String? = null): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val bodyMap = if (monitor != null) mapOf("monitor" to monitor) else emptyMap<String, String>()
+            val req = Request.Builder()
+                .url("${getBaseUrl()}/api/stream/pc-to-phone/start")
+                .header("X-Pulsar-Token", getToken())
+                .post(gson.toJson(bodyMap).toRequestBody(jsonMediaType))
+                .build()
+            client.newCall(req).execute().use { resp ->
+                Result.success(resp.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun startPhoneCastToPc(fullscreen: Boolean): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val json = gson.toJson(mapOf("fullscreen" to fullscreen))
+            val req = Request.Builder()
+                .url("${getBaseUrl()}/api/stream/phone-to-pc/start")
+                .header("X-Pulsar-Token", getToken())
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            client.newCall(req).execute().use { resp ->
+                Result.success(resp.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun stopPhoneCastToPc(): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("${getBaseUrl()}/api/stream/phone-to-pc/stop")
+                .header("X-Pulsar-Token", getToken())
+                .post("{}".toRequestBody(jsonMediaType))
+                .build()
+            client.newCall(req).execute().use { resp ->
+                Result.success(resp.isSuccessful)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 

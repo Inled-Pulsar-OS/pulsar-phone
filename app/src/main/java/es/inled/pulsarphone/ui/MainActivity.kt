@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import es.inled.pulsarphone.PulsarPhoneApp
@@ -519,25 +520,43 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun togglePhoneCastToPc() {
-        val cfg = PulsarPhoneApp.instance.getConfig()
-        val action = if (isPhoneCastActive) "stop" else "start"
-        lifecycleScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    val client = OkHttpClient.Builder().connectTimeout(3, TimeUnit.SECONDS).build()
-                    val req = Request.Builder()
-                        .url("http://${cfg.pcIp}:${cfg.pcPort}/api/stream/phone-to-pc/$action")
-                        .addHeader("X-Pulsar-Token", cfg.token)
-                        .post("{}".toRequestBody("application/json".toMediaType()))
-                        .build()
-                    client.newCall(req).execute().close()
+        if (isPhoneCastActive) {
+            lifecycleScope.launch {
+                val res = PulsarApiClient.stopPhoneCastToPc()
+                if (res.isSuccess) {
+                    isPhoneCastActive = false
+                    updateCastButtonUI()
+                    Toast.makeText(this@MainActivity, getString(R.string.phone_cast_stopped), Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, getString(R.string.error_sending, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_SHORT).show()
                 }
-                isPhoneCastActive = !isPhoneCastActive
+            }
+            return
+        }
+
+        val options = arrayOf(
+            getString(R.string.cast_mode_fullscreen),
+            getString(R.string.cast_mode_windowed)
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.cast_mode_dialog_title)
+            .setItems(options) { _, which ->
+                val isFullscreen = (which == 0)
+                startPhoneCast(isFullscreen)
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    private fun startPhoneCast(fullscreen: Boolean) {
+        lifecycleScope.launch {
+            val res = PulsarApiClient.startPhoneCastToPc(fullscreen = fullscreen)
+            if (res.isSuccess) {
+                isPhoneCastActive = true
                 updateCastButtonUI()
-                val msg = if (isPhoneCastActive) getString(R.string.phone_cast_started) else getString(R.string.phone_cast_stopped)
-                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, getString(R.string.error_sending, e.message ?: ""), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, getString(R.string.phone_cast_started), Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this@MainActivity, getString(R.string.error_sending, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_SHORT).show()
             }
         }
     }

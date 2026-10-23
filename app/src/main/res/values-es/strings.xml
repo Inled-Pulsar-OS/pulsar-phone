@@ -82,4 +82,10 @@
     <string name="btn_send">Enviar</string>
     <string name="btn_notifications">Notificaciones</string>
     <string name="close_keyboard">Cerrar teclado</string>
+    <string name="cast_mode_dialog_title">Modo de transmisión en PC</string>
+    <string name="cast_mode_fullscreen">Pantalla completa</string>
+    <string name="cast_mode_windowed">Modo ventana</string>
+    <string name="select_monitor_title">Seleccionar pantalla del PC</string>
+    <string name="monitor_primary_badge">%1$s (Principal)</string>
+    <string name="monitor_switched">Cambiando a %1$s...</string>
 </resources>
