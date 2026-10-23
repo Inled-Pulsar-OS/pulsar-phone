@@ -1,8 +1,15 @@
 package es.inled.pulsarphone.ui
 
-import android.net.Uri
+import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.View
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -25,6 +32,7 @@ class DesktopStreamActivity : AppCompatActivity() {
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
 
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityDesktopStreamBinding.inflate(layoutInflater)
@@ -34,12 +42,53 @@ class DesktopStreamActivity : AppCompatActivity() {
             finish()
         }
 
+        setupWebView()
         startPcStream()
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        val webView = binding.desktopWebView
+        webView.setBackgroundColor(0xFF000000.toInt())
+        val s = webView.settings
+        s.javaScriptEnabled = true
+        s.domStorageEnabled = true
+        s.mediaPlaybackRequiresUserGesture = false
+        s.setSupportZoom(true)
+        s.builtInZoomControls = true
+        s.displayZoomControls = false
+        s.useWideViewPort = true
+        s.loadWithOverviewMode = true
+        s.cacheMode = WebSettings.LOAD_NO_CACHE
+
+        webView.webChromeClient = WebChromeClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                binding.streamLoadingLayout.visibility = View.GONE
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                if (request?.isForMainFrame == true) {
+                    Toast.makeText(
+                        this@DesktopStreamActivity,
+                        "Error al conectar con la transmisión del PC",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    binding.streamLoadingLayout.visibility = View.GONE
+                }
+            }
+        }
     }
 
     private fun startPcStream() {
         val cfg = PulsarPhoneApp.instance.getConfig()
-        val streamUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/live.ts?token=${cfg.token}"
+        val viewUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/view?token=${cfg.token}"
 
         lifecycleScope.launch {
             try {
@@ -55,29 +104,14 @@ class DesktopStreamActivity : AppCompatActivity() {
                 // Ignore, server will start on request
             }
 
-            binding.desktopVideoView.setOnPreparedListener { mp ->
-                binding.streamLoadingLayout.visibility = View.GONE
-                mp.isLooping = true
-                mp.start()
-            }
-
-            binding.desktopVideoView.setOnErrorListener { _, what, extra ->
-                Toast.makeText(
-                    this@DesktopStreamActivity,
-                    "Error al reproducir transmisión ($what, $extra)",
-                    Toast.LENGTH_SHORT
-                ).show()
-                binding.streamLoadingLayout.visibility = View.GONE
-                true
-            }
-
-            binding.desktopVideoView.setVideoURI(Uri.parse(streamUrl))
+            binding.desktopWebView.loadUrl(viewUrl)
         }
     }
 
     override fun onDestroy() {
         try {
-            binding.desktopVideoView.stopPlayback()
+            binding.desktopWebView.loadUrl("about:blank")
+            binding.desktopWebView.destroy()
         } catch (e: Exception) {}
         super.onDestroy()
     }

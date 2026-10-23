@@ -5,11 +5,10 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <VideoView
-        android:id="@+id/desktopVideoView"
+    <WebView
+        android:id="@+id/desktopWebView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center" />
+        android:layout_height="match_parent" />
 
     <!-- Loading indicator -->
     <LinearLayout
