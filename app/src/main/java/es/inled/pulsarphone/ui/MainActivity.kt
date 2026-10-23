@@ -10,6 +10,7 @@ import android.net.NetworkRequest
 import android.net.Uri
 import android.net.VpnService
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.View
 import android.widget.Toast
@@ -26,9 +27,16 @@ import es.inled.pulsarphone.R
 import es.inled.pulsarphone.data.ConnectionConfig
 import es.inled.pulsarphone.data.PcApp
 import es.inled.pulsarphone.databinding.ActivityMainBinding
+import es.inled.pulsarphone.net.FlydropClient
 import es.inled.pulsarphone.net.PulsarApiClient
 import es.inled.pulsarphone.net.PulsarVpnManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class MainActivity : AppCompatActivity() {
 
@@ -51,6 +59,15 @@ class MainActivity : AppCompatActivity() {
             startInternalVpn()
         } else {
             Toast.makeText(this, getString(R.string.vpn_permission_denied), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Direct In-App File Selector for FlyDrop streaming
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            sendSelectedFilesToPc(uris)
         }
     }
 
@@ -105,7 +122,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnMountFiles.setOnClickListener {
-            openSystemFileManager()
+            filePickerLauncher.launch(arrayOf("*/*"))
+        }
+
+        binding.btnWatchPcScreen.setOnClickListener {
+            val intent = Intent(this, DesktopStreamActivity::class.java)
+            startActivity(intent)
+        }
+
+        binding.btnCastPhoneToPc.setOnClickListener {
+            castPhoneScreenToPc()
         }
 
         binding.searchAppsInput.doAfterTextChanged { text ->
@@ -128,8 +154,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateNotificationSyncButton() {
         val granted = isNotificationAccessGranted()
+        binding.btnNotificationSync.text = getString(R.string.btn_notifications)
         if (granted) {
-            binding.btnNotificationSync.text = getString(R.string.notifications_active_test)
             binding.btnNotificationSync.setIconResource(android.R.drawable.ic_dialog_info)
             binding.btnNotificationSync.setOnClickListener {
                 lifecycleScope.launch {
@@ -149,7 +175,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } else {
-            binding.btnNotificationSync.text = getString(R.string.notifications_permission_prompt)
             binding.btnNotificationSync.setIconResource(android.R.drawable.ic_lock_idle_alarm)
             binding.btnNotificationSync.setOnClickListener {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
@@ -409,15 +434,69 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun openSystemFileManager() {
-        try {
-            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "*/*"
+    private fun sendSelectedFilesToPc(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val total = uris.size
+        Toast.makeText(this, getString(R.string.sending_multiple_files, total), Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch {
+            var successCount = 0
+            for ((index, uri) in uris.withIndex()) {
+                var fileName = "archivo_${index + 1}"
+                var fileSize = 0L
+
+                try {
+                    contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (cursor.moveToFirst()) {
+                            if (nameIndex != -1) fileName = cursor.getString(nameIndex) ?: fileName
+                            if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex)
+                        }
+                    }
+                } catch (e: Exception) {
+                    fileName = uri.lastPathSegment ?: fileName
+                }
+
+                val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+                val res = FlydropClient.sendFileToFlydrop(
+                    context = this@MainActivity,
+                    uri = uri,
+                    fileName = fileName,
+                    mimeType = mimeType,
+                    fileSize = fileSize
+                )
+
+                if (res.isSuccess) {
+                    successCount++
+                }
             }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Toast.makeText(this, getString(R.string.open_files_app_hint), Toast.LENGTH_LONG).show()
+
+            if (successCount == total) {
+                Toast.makeText(this@MainActivity, getString(R.string.multiple_files_sent_success, successCount, total), Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this@MainActivity, getString(R.string.multiple_files_sent_success, successCount, total), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun castPhoneScreenToPc() {
+        val cfg = PulsarPhoneApp.instance.getConfig()
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val client = OkHttpClient()
+                    val req = Request.Builder()
+                        .url("http://${cfg.pcIp}:${cfg.pcPort}/api/stream/phone-to-pc/start")
+                        .addHeader("X-Pulsar-Token", cfg.token)
+                        .post("{}".toRequestBody("application/json".toMediaType()))
+                        .build()
+                    client.newCall(req).execute().close()
+                }
+                Toast.makeText(this@MainActivity, getString(R.string.phone_cast_started), Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, getString(R.string.error_sending, e.message ?: ""), Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }

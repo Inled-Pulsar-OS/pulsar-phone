@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -123,12 +125,8 @@ class BroadwayActivity : AppCompatActivity() {
         @JavascriptInterface
         fun onKeyboardStatus(show: Boolean) {
             runOnUiThread {
-                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 if (show) {
-                    binding.broadwayWebView.requestFocus()
-                    imm.showSoftInput(binding.broadwayWebView, InputMethodManager.SHOW_IMPLICIT)
-                } else {
-                    imm.hideSoftInputFromWindow(binding.broadwayWebView.windowToken, 0)
+                    showNativeInputBar()
                 }
             }
         }
@@ -383,6 +381,33 @@ class BroadwayActivity : AppCompatActivity() {
                 }
             };
 
+            window.sendTextToBroadway = function(text) {
+                if (!text || typeof sendInput !== 'function') return;
+                for (var i = 0; i < text.length; i++) {
+                    var ch = text.charCodeAt(i);
+                    var sym = ch;
+                    if (ch === 10 || ch === 13) {
+                        sym = 65293; // Return / Enter
+                    } else if (ch >= 32 && ch <= 126) {
+                        sym = ch;
+                    } else {
+                        sym = text.codePointAt(i);
+                        if (sym > 0xff) {
+                            sym = sym | 0x01000000;
+                        }
+                    }
+                    sendInput(BROADWAY_EVENT_KEY_PRESS, [sym, 0]);
+                    sendInput(BROADWAY_EVENT_KEY_RELEASE, [sym, 0]);
+                }
+            };
+
+            window.sendBackspaceToBroadway = function() {
+                if (typeof sendInput === 'function') {
+                    sendInput(BROADWAY_EVENT_KEY_PRESS, [65288, 0]);
+                    sendInput(BROADWAY_EVENT_KEY_RELEASE, [65288, 0]);
+                }
+            };
+
             window.onPulsarSurfaceUpdated = function() {
                 var vw = window.innerWidth || document.documentElement.clientWidth;
                 var vh = window.innerHeight || document.documentElement.clientHeight;
@@ -414,18 +439,18 @@ class BroadwayActivity : AppCompatActivity() {
                     var baseW = root.width || root.div.offsetWidth || 800;
                     var baseH = root.height || root.div.offsetHeight || 600;
 
-                    // Clean proportional fit preserving native aspect ratio without distortion
+                    // Clean proportional fit: fits full screen width like Linux Mobile (Phosh)
                     var scale = 1.0;
-                    if (baseW > vw || baseH > vh) {
-                        scale = Math.min(vw / baseW, vh / baseH);
-                        scale = Math.max(0.4, scale);
+                    if (baseW > 0) {
+                        scale = vw / baseW;
+                        scale = Math.min(1.2, Math.max(0.35, scale));
                     }
                     window.broadwayScale = scale;
 
                     var renderedW = Math.round(baseW * scale);
                     var renderedH = Math.round(baseH * scale);
                     var offsetX = Math.max(0, Math.round((vw - renderedW) / 2));
-                    var offsetY = Math.max(0, Math.round((vh - renderedH) / 2));
+                    var offsetY = 0;
                     window.broadwayOffsetX = offsetX;
                     window.broadwayOffsetY = offsetY;
 
@@ -480,10 +505,56 @@ class BroadwayActivity : AppCompatActivity() {
         }
 
         binding.btnToggleKeyboard.setOnClickListener {
-            binding.broadwayWebView.requestFocus()
-            binding.broadwayWebView.evaluateJavascript("if (window.triggerBroadwayKeyboard) window.triggerBroadwayKeyboard();", null)
-            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.showSoftInput(binding.broadwayWebView, InputMethodManager.SHOW_FORCED)
+            toggleNativeInputBar()
+        }
+
+        binding.btnCloseInputBar.setOnClickListener {
+            hideNativeInputBar()
+        }
+
+        binding.btnSendText.setOnClickListener {
+            commitNativeInput()
+        }
+
+        binding.etNativeInput.setOnEditorActionListener { _, actionId, event ->
+            if (actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE ||
+                (event != null && event.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)) {
+                commitNativeInput()
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun showNativeInputBar() {
+        binding.nativeInputBar.visibility = View.VISIBLE
+        binding.etNativeInput.requestFocus()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(binding.etNativeInput, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    private fun hideNativeInputBar() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(binding.etNativeInput.windowToken, 0)
+        binding.nativeInputBar.visibility = View.GONE
+        binding.broadwayWebView.requestFocus()
+    }
+
+    private fun toggleNativeInputBar() {
+        if (binding.nativeInputBar.visibility == View.VISIBLE) {
+            hideNativeInputBar()
+        } else {
+            showNativeInputBar()
+        }
+    }
+
+    private fun commitNativeInput() {
+        val text = binding.etNativeInput.text?.toString().orEmpty()
+        if (text.isNotEmpty()) {
+            val jsonText = org.json.JSONObject.quote(text)
+            binding.broadwayWebView.evaluateJavascript("if (window.sendTextToBroadway) window.sendTextToBroadway($jsonText);", null)
+            binding.etNativeInput.text?.clear()
         }
     }
 

@@ -72,4 +72,12 @@
     <string name="clipboard_sync_error">Error syncing clipboard</string>
     <string name="clipboard_empty">Clipboard is empty</string>
     <string name="open_files_app_hint">Open Android \'Files\' app to browse PC</string>
+    <string name="btn_watch_pc">Watch PC Screen</string>
+    <string name="btn_cast_to_pc">Cast to PC</string>
+    <string name="starting_pc_stream">Connecting to PC desktop stream...</string>
+    <string name="phone_cast_started">Phone screen stream opened on PC</string>
+    <string name="type_to_send_hint">Type text to send to app...</string>
+    <string name="btn_send">Send</string>
+    <string name="btn_notifications">Notifications</string>
+    <string name="close_keyboard">Close keyboard</string>
 </resources>

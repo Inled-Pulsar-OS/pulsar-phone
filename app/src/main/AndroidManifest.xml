@@ -45,6 +45,13 @@
             android:exported="false"
             android:theme="@style/Theme.PulsarPhone.Fullscreen" />
 
+        <!-- Desktop Screen & Sound Stream Activity -->
+        <activity
+            android:name=".ui.DesktopStreamActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false"
+            android:theme="@style/Theme.PulsarPhone.Fullscreen" />
+
         <!-- Share Sheet Activity (FlyDrop integration) -->
         <activity
             android:name=".ui.ShareActivity"
