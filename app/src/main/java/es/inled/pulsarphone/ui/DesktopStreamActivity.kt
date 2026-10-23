@@ -7,7 +7,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import es.inled.pulsarphone.PulsarPhoneApp
-import es.inled.pulsarphone.R
 import es.inled.pulsarphone.databinding.ActivityDesktopStreamBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,7 +42,6 @@ class DesktopStreamActivity : AppCompatActivity() {
         val streamUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/live.ts?token=${cfg.token}"
 
         lifecycleScope.launch {
-            // First notify bridge daemon to ensure stream is active
             try {
                 withContext(Dispatchers.IO) {
                     val req = Request.Builder()
@@ -54,19 +52,20 @@ class DesktopStreamActivity : AppCompatActivity() {
                     client.newCall(req).execute().close()
                 }
             } catch (e: Exception) {
-                // Ignore connection error; VideoView will attempt to connect
+                // Ignore, server will start on request
             }
 
             binding.desktopVideoView.setOnPreparedListener { mp ->
                 binding.streamLoadingLayout.visibility = View.GONE
+                mp.isLooping = true
                 mp.start()
             }
 
             binding.desktopVideoView.setOnErrorListener { _, what, extra ->
                 Toast.makeText(
                     this@DesktopStreamActivity,
-                    "Error al conectar con la transmisión del PC ($what, $extra)",
-                    Toast.LENGTH_LONG
+                    "Error al reproducir transmisión ($what, $extra)",
+                    Toast.LENGTH_SHORT
                 ).show()
                 binding.streamLoadingLayout.visibility = View.GONE
                 true
@@ -77,7 +76,9 @@ class DesktopStreamActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        binding.desktopVideoView.stopPlayback()
+        try {
+            binding.desktopVideoView.stopPlayback()
+        } catch (e: Exception) {}
         super.onDestroy()
     }
 }

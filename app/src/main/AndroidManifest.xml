@@ -49,7 +49,7 @@
         <activity
             android:name=".ui.DesktopStreamActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:exported="false"
+            android:exported="true"
             android:theme="@style/Theme.PulsarPhone.Fullscreen" />
 
         <!-- Share Sheet Activity (FlyDrop integration) -->

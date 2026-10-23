@@ -212,10 +212,17 @@ class BroadwayActivity : AppCompatActivity() {
                 -webkit-user-select: none !important;
                 touch-action: pan-x pan-y pinch-zoom !important;
             }
+            #pulsar-stage {
+                position: absolute;
+                left: 0;
+                top: 0;
+                transform-origin: 0 0;
+            }
             </style>
             <script type="text/javascript" src="broadway.js"></script>
             </head>
             <body onload="connect()" onclick="if (!document.hasFocus() && window.topElement !== window.self) { window.focus(); }">
+            <div id="pulsar-stage"></div>
             </body>
             </html>
         """.trimIndent()
@@ -355,14 +362,25 @@ class BroadwayActivity : AppCompatActivity() {
             patched = patched.replace(kbTarget, kbReplacement)
         }
 
-        // Patch 6: Hook DISPLAY_OP_SHOW_SURFACE and DISPLAY_OP_RESIZE_NODE
+        // Patch 6: Hook DISPLAY_OP_APPEND_ROOT and DISPLAY_OP_SHOW_SURFACE
+        val appendRootTarget = "case DISPLAY_OP_APPEND_ROOT:\n            document.body.appendChild(cmd[1]);\n            break;"
+        val appendRootReplacement = """
+            case DISPLAY_OP_APPEND_ROOT:
+                var stage = document.getElementById('pulsar-stage') || document.body;
+                stage.appendChild(cmd[1]);
+                break;
+        """.trimIndent()
+        if (patched.contains(appendRootTarget)) {
+            patched = patched.replace(appendRootTarget, appendRootReplacement)
+        }
+
         val showSurfaceTarget = "div.style[\"visibility\"] = \"visible\";\n            break;"
         val showSurfaceReplacement = "div.style[\"visibility\"] = \"visible\";\n            if (window.onPulsarSurfaceUpdated) window.onPulsarSurfaceUpdated();\n            break;"
         if (patched.contains(showSurfaceTarget)) {
             patched = patched.replace(showSurfaceTarget, showSurfaceReplacement)
         }
 
-        // Patch 7: Clean native layout adapter preserving GTK aesthetics
+        // Patch 7: Clean native layout adapter preserving GTK aesthetics & natural window cascading
         val mobileHelperScript = """
             
             // --- Pulsar Clean Layout & Input Adapter ---
@@ -411,75 +429,48 @@ class BroadwayActivity : AppCompatActivity() {
             window.onPulsarSurfaceUpdated = function() {
                 var vw = window.innerWidth || document.documentElement.clientWidth;
                 var vh = window.innerHeight || document.documentElement.clientHeight;
-                if (!vw || typeof surfaces === 'undefined' || !surfaces) return;
+                var stage = document.getElementById('pulsar-stage');
+                if (!vw || !stage || typeof surfaces === 'undefined' || !surfaces) return;
 
-                var root = null;
-                var maxArea = 0;
+                var maxW = 0;
+                var maxH = 0;
                 for (var id in surfaces) {
                     var s = surfaces[id];
-                    if (s && s.div && (s.transientParent === 0 || !s.transientParent)) {
-                        var area = (s.width || 0) * (s.height || 0);
-                        if (area >= maxArea) {
-                            maxArea = area;
-                            root = s;
-                        }
+                    if (s && s.div) {
+                        var right = (s.x || 0) + (s.width || s.div.offsetWidth || 0);
+                        var bottom = (s.y || 0) + (s.height || s.div.offsetHeight || 0);
+                        if (right > maxW) maxW = right;
+                        if (bottom > maxH) maxH = bottom;
                     }
                 }
 
-                if (!root) {
-                    for (var id in surfaces) {
-                        if (surfaces[id] && surfaces[id].div) {
-                            root = surfaces[id];
-                            break;
-                        }
-                    }
+                if (maxW <= 0) maxW = 800;
+                if (maxH <= 0) maxH = 600;
+
+                // Scale the entire stage preserving GTK relative positions so windows NEVER overlap!
+                var scale = 1.0;
+                if (maxW > 0) {
+                    scale = vw / maxW;
+                    scale = Math.min(1.25, Math.max(0.35, scale));
                 }
+                window.broadwayScale = scale;
 
-                if (root && root.div) {
-                    var baseW = root.width || root.div.offsetWidth || 800;
-                    var baseH = root.height || root.div.offsetHeight || 600;
+                var renderedW = Math.round(maxW * scale);
+                var offsetX = Math.max(0, Math.round((vw - renderedW) / 2));
+                window.broadwayOffsetX = offsetX;
+                window.broadwayOffsetY = 0;
 
-                    // Clean proportional fit: fits full screen width like Linux Mobile (Phosh)
-                    var scale = 1.0;
-                    if (baseW > 0) {
-                        scale = vw / baseW;
-                        scale = Math.min(1.2, Math.max(0.35, scale));
-                    }
-                    window.broadwayScale = scale;
+                stage.style.left = offsetX + 'px';
+                stage.style.top = '0px';
+                stage.style.transform = 'scale(' + scale + ')';
+                stage.style.width = maxW + 'px';
+                stage.style.height = maxH + 'px';
 
-                    var renderedW = Math.round(baseW * scale);
-                    var renderedH = Math.round(baseH * scale);
-                    var offsetX = Math.max(0, Math.round((vw - renderedW) / 2));
-                    var offsetY = 0;
-                    window.broadwayOffsetX = offsetX;
-                    window.broadwayOffsetY = offsetY;
+                document.body.style.width = Math.max(vw, renderedW + offsetX) + 'px';
+                document.body.style.minHeight = Math.max(vh, Math.round(maxH * scale)) + 'px';
 
-                    // Keep native GTK window aesthetics (do not strip shadows or borders!)
-                    root.div.style.position = 'absolute';
-                    root.div.style.transformOrigin = '0 0';
-                    root.div.style.transform = (scale !== 1.0) ? ('scale(' + scale + ')') : 'none';
-                    root.div.style.left = offsetX + 'px';
-                    root.div.style.top = offsetY + 'px';
-
-                    document.body.style.minHeight = Math.max(vh, offsetY + renderedH) + 'px';
-                    document.body.style.width = Math.max(vw, offsetX + renderedW) + 'px';
-
-                    // Position child popups/dialogs proportionally
-                    for (var id in surfaces) {
-                        var child = surfaces[id];
-                        if (child && child !== root && child.div) {
-                            child.div.style.transformOrigin = '0 0';
-                            child.div.style.transform = (scale !== 1.0) ? ('scale(' + scale + ')') : 'none';
-                            if (child.x !== undefined && child.y !== undefined) {
-                                child.div.style.left = Math.round(offsetX + child.x * scale) + 'px';
-                                child.div.style.top = Math.round(offsetY + child.y * scale) + 'px';
-                            }
-                        }
-                    }
-
-                    if (window.BroadwayBridge && typeof window.BroadwayBridge.onAppLoaded === 'function') {
-                        window.BroadwayBridge.onAppLoaded();
-                    }
+                if (window.BroadwayBridge && typeof window.BroadwayBridge.onAppLoaded === 'function') {
+                    window.BroadwayBridge.onAppLoaded();
                 }
             };
 
