@@ -591,7 +591,11 @@ class BroadwayActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        binding.broadwayWebView.destroy()
+        try {
+            binding.broadwayWebView.loadUrl("about:blank")
+            binding.broadwayWebView.clearCache(true)
+            binding.broadwayWebView.destroy()
+        } catch (e: Exception) {}
         super.onDestroy()
     }
 

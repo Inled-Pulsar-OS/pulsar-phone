@@ -74,8 +74,10 @@
     <string name="open_files_app_hint">Abre la app \'Archivos\' de Android para ver el PC</string>
     <string name="btn_watch_pc">Ver PC (Pantalla)</string>
     <string name="btn_cast_to_pc">Transmitir al PC</string>
+    <string name="btn_stop_cast">Detener transmisión</string>
     <string name="starting_pc_stream">Conectando a la transmisión del PC...</string>
     <string name="phone_cast_started">Transmisión del teléfono abierta en el PC</string>
+    <string name="phone_cast_stopped">Transmisión al PC detenida</string>
     <string name="type_to_send_hint">Escribe texto para enviar a la app...</string>
     <string name="btn_send">Enviar</string>
     <string name="btn_notifications">Notificaciones</string>

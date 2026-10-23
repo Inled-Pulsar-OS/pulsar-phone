@@ -74,8 +74,10 @@
     <string name="open_files_app_hint">Open Android \'Files\' app to browse PC</string>
     <string name="btn_watch_pc">Watch PC Screen</string>
     <string name="btn_cast_to_pc">Cast to PC</string>
+    <string name="btn_stop_cast">Stop Cast to PC</string>
     <string name="starting_pc_stream">Connecting to PC desktop stream...</string>
     <string name="phone_cast_started">Phone screen stream opened on PC</string>
+    <string name="phone_cast_stopped">Phone cast to PC stopped</string>
     <string name="type_to_send_hint">Type text to send to app...</string>
     <string name="btn_send">Send</string>
     <string name="btn_notifications">Notifications</string>

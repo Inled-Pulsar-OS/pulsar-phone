@@ -33,6 +33,7 @@ import es.inled.pulsarphone.net.PulsarVpnManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.TimeUnit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -89,6 +90,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updateVpnButtonState()
         updateNotificationSyncButton()
+        checkPhoneCastStatus()
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -131,7 +133,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnCastPhoneToPc.setOnClickListener {
-            castPhoneScreenToPc()
+            togglePhoneCastToPc()
         }
 
         binding.searchAppsInput.doAfterTextChanged { text ->
@@ -480,20 +482,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun castPhoneScreenToPc() {
+    private var isPhoneCastActive = false
+
+    private fun checkPhoneCastStatus() {
         val cfg = PulsarPhoneApp.instance.getConfig()
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    val client = OkHttpClient()
+                val running = withContext(Dispatchers.IO) {
+                    val client = OkHttpClient.Builder().connectTimeout(2, TimeUnit.SECONDS).build()
                     val req = Request.Builder()
-                        .url("http://${cfg.pcIp}:${cfg.pcPort}/api/stream/phone-to-pc/start")
+                        .url("http://${cfg.pcIp}:${cfg.pcPort}/api/stream/phone-to-pc/status")
+                        .addHeader("X-Pulsar-Token", cfg.token)
+                        .get()
+                        .build()
+                    val resp = client.newCall(req).execute()
+                    val body = resp.body?.string().orEmpty()
+                    resp.close()
+                    org.json.JSONObject(body).optBoolean("running", false)
+                }
+                isPhoneCastActive = running
+                updateCastButtonUI()
+            } catch (e: Exception) {
+                // Ignore status check errors
+            }
+        }
+    }
+
+    private fun updateCastButtonUI() {
+        if (isPhoneCastActive) {
+            binding.btnCastPhoneToPc.text = getString(R.string.btn_stop_cast)
+            binding.btnCastPhoneToPc.setIconResource(android.R.drawable.ic_media_pause)
+        } else {
+            binding.btnCastPhoneToPc.text = getString(R.string.btn_cast_to_pc)
+            binding.btnCastPhoneToPc.setIconResource(android.R.drawable.ic_menu_share)
+        }
+    }
+
+    private fun togglePhoneCastToPc() {
+        val cfg = PulsarPhoneApp.instance.getConfig()
+        val action = if (isPhoneCastActive) "stop" else "start"
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val client = OkHttpClient.Builder().connectTimeout(3, TimeUnit.SECONDS).build()
+                    val req = Request.Builder()
+                        .url("http://${cfg.pcIp}:${cfg.pcPort}/api/stream/phone-to-pc/$action")
                         .addHeader("X-Pulsar-Token", cfg.token)
                         .post("{}".toRequestBody("application/json".toMediaType()))
                         .build()
                     client.newCall(req).execute().close()
                 }
-                Toast.makeText(this@MainActivity, getString(R.string.phone_cast_started), Toast.LENGTH_SHORT).show()
+                isPhoneCastActive = !isPhoneCastActive
+                updateCastButtonUI()
+                val msg = if (isPhoneCastActive) getString(R.string.phone_cast_started) else getString(R.string.phone_cast_stopped)
+                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this@MainActivity, getString(R.string.error_sending, e.message ?: ""), Toast.LENGTH_SHORT).show()
             }
