@@ -1,6 +1,9 @@
 package es.inled.pulsarphone.ui
 
 import android.annotation.SuppressLint
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import android.os.Bundle
 import android.view.View
 import android.webkit.WebChromeClient
@@ -18,13 +21,20 @@ import es.inled.pulsarphone.R
 import es.inled.pulsarphone.data.PcMonitor
 import es.inled.pulsarphone.databinding.ActivityDesktopStreamBinding
 import es.inled.pulsarphone.net.PulsarApiClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.BufferedInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 class DesktopStreamActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityDesktopStreamBinding
     private var availableMonitors: List<PcMonitor> = emptyList()
     private var currentConnector: String? = null
+    private var pcmAudioJob: Job? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,7 +94,7 @@ class DesktopStreamActivity : AppCompatActivity() {
     private fun startPcStream() {
         val cfg = PulsarPhoneApp.instance.getConfig()
         val monParam = if (currentConnector != null) "&monitor=$currentConnector" else ""
-        val viewUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/view?token=${cfg.token}$monParam"
+        val viewUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/view?token=${cfg.token}$monParam&noaudio=1"
 
         lifecycleScope.launch {
             try {
@@ -94,7 +104,97 @@ class DesktopStreamActivity : AppCompatActivity() {
             }
 
             binding.desktopWebView.loadUrl(viewUrl)
+            startPcmAudioStream()
         }
+    }
+
+    private fun startPcmAudioStream() {
+        stopPcmAudioStream()
+        val cfg = PulsarPhoneApp.instance.getConfig()
+        val audioUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/audio.pcm?token=${cfg.token}"
+
+        pcmAudioJob = lifecycleScope.launch(Dispatchers.IO) {
+            var audioTrack: AudioTrack? = null
+            var connection: HttpURLConnection? = null
+            try {
+                val sampleRate = 48000
+                val channelConfig = AudioFormat.CHANNEL_OUT_STEREO
+                val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+                val minBufSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+                val bufferSize = (minBufSize * 2).coerceAtLeast(4096)
+
+                audioTrack = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(audioFormat)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(channelConfig)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(bufferSize)
+                    .setTransferMode(AudioTrack.MODE_STREAM)
+                    .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+                    .build()
+
+                audioTrack.play()
+
+                val url = URL(audioUrl)
+                connection = (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 4000
+                    readTimeout = 0
+                    doInput = true
+                    setRequestProperty("X-Pulsar-Token", cfg.token)
+                }
+                connection.connect()
+
+                val inputStream = BufferedInputStream(connection.inputStream, 4096)
+                val chunk = ByteArray(1920) // 10ms of 48kHz stereo s16le
+
+                while (isActive) {
+                    var offset = 0
+                    while (offset < chunk.size && isActive) {
+                        val r = inputStream.read(chunk, offset, chunk.size - offset)
+                        if (r < 0) break
+                        offset += r
+                    }
+                    if (offset <= 0) break
+                    audioTrack.write(chunk, 0, offset)
+                }
+            } catch (e: Exception) {
+                // Connection closed or error
+            } finally {
+                try {
+                    audioTrack?.stop()
+                    audioTrack?.release()
+                } catch (e: Exception) {}
+                try {
+                    connection?.disconnect()
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
+    private fun stopPcmAudioStream() {
+        pcmAudioJob?.cancel()
+        pcmAudioJob = null
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (pcmAudioJob == null) {
+            startPcmAudioStream()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopPcmAudioStream()
     }
 
     private fun loadMonitors() {
@@ -146,7 +246,7 @@ class DesktopStreamActivity : AppCompatActivity() {
         val cfg = PulsarPhoneApp.instance.getConfig()
         lifecycleScope.launch {
             PulsarApiClient.startPcDesktopStream(monitor.connector)
-            val viewUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/view?token=${cfg.token}&monitor=${monitor.connector}&t=${System.currentTimeMillis()}"
+            val viewUrl = "http://${cfg.pcIp}:${cfg.pcPort}/api/stream/pc-to-phone/view?token=${cfg.token}&monitor=${monitor.connector}&noaudio=1&t=${System.currentTimeMillis()}"
             binding.desktopWebView.loadUrl(viewUrl)
         }
     }
