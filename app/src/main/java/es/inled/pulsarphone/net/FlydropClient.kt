@@ -8,6 +8,7 @@ import es.inled.pulsarphone.PulsarPhoneApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
@@ -47,12 +48,18 @@ object FlydropClient {
             OkHttpClient.Builder()
                 .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
                 .hostnameVerifier { _, _ -> true }
+                .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+                .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.NANOSECONDS))
+                .retryOnConnectionFailure(true)
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(120, TimeUnit.SECONDS)
                 .writeTimeout(120, TimeUnit.SECONDS)
                 .build()
         } catch (e: Exception) {
             OkHttpClient.Builder()
+                .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+                .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.NANOSECONDS))
+                .retryOnConnectionFailure(true)
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(120, TimeUnit.SECONDS)
                 .writeTimeout(120, TimeUnit.SECONDS)
@@ -63,10 +70,14 @@ object FlydropClient {
     private fun getCandidateFlydropUrls(): List<String> {
         val cfg = PulsarPhoneApp.instance.getConfig()
         // FlyDrop runs HTTPS by default with self-signed certificate on port 53317
-        return listOf(
-            "https://${cfg.pcIp}:${cfg.flydropPort}/api/localsend/v2",
-            "http://${cfg.pcIp}:${cfg.flydropPort}/api/localsend/v2"
-        )
+        return if (cfg.flydropPort == 53317) {
+            listOf("https://${cfg.pcIp}:${cfg.flydropPort}/api/localsend/v2")
+        } else {
+            listOf(
+                "https://${cfg.pcIp}:${cfg.flydropPort}/api/localsend/v2",
+                "http://${cfg.pcIp}:${cfg.flydropPort}/api/localsend/v2"
+            )
+        }
     }
 
     suspend fun sendTextToFlydrop(text: String): Result<Boolean> = withContext(Dispatchers.IO) {
@@ -153,12 +164,15 @@ object FlydropClient {
         onProgress: ((Float) -> Unit)? = null
     ): Result<Boolean> = withContext(Dispatchers.IO) {
         val fileId = UUID.randomUUID().toString()
+        val safeMime = mimeType.ifBlank { "application/octet-stream" }
+        val parsedMediaType = safeMime.toMediaTypeOrNull() ?: "application/octet-stream".toMediaType()
+
         val filesMap = mapOf(
             fileId to mapOf(
                 "id" to fileId,
                 "fileName" to fileName,
                 "size" to fileSize,
-                "fileType" to mimeType,
+                "fileType" to safeMime,
                 "preview" to null
             )
         )
@@ -181,6 +195,7 @@ object FlydropClient {
 
         for (baseUrl in getCandidateFlydropUrls()) {
             try {
+                android.util.Log.i("FlydropClient", "Starting transfer for $fileName ($fileSize bytes) to $baseUrl")
                 // Step 1: prepare-upload
                 val prepReq = Request.Builder()
                     .url("$baseUrl/prepare-upload")
@@ -190,6 +205,7 @@ object FlydropClient {
                 val prepResp = client.newCall(prepReq).execute()
                 if (!prepResp.isSuccessful) {
                     lastError = Exception("FlyDrop rechazó o no respondió: ${prepResp.code}")
+                    android.util.Log.w("FlydropClient", "prepare-upload failed: code=${prepResp.code}")
                     continue
                 }
 
@@ -199,25 +215,34 @@ object FlydropClient {
                 val sessionId = prepData["sessionId"] as? String ?: ""
                 val tokens = prepData["files"] as? Map<String, String> ?: emptyMap()
                 val token = tokens[fileId] ?: ""
+                android.util.Log.i("FlydropClient", "prepare-upload OK: sessionId=$sessionId, token=$token")
 
                 // Step 2: stream upload from content resolver
-                val inputStream = context.contentResolver.openInputStream(uri)
-                    ?: return@withContext Result.failure(Exception("No se pudo leer el archivo local"))
-
                 val requestBody = object : RequestBody() {
-                    override fun contentType() = mimeType.toMediaType()
-                    override fun contentLength() = fileSize
+                    override fun contentType() = parsedMediaType
+                    override fun contentLength() = if (fileSize > 0L) fileSize else -1L
 
                     override fun writeTo(sink: BufferedSink) {
-                        val buffer = ByteArray(65536)
-                        var uploaded = 0L
+                        val inputStream = try {
+                            context.contentResolver.openInputStream(uri)
+                        } catch (e: Throwable) {
+                            android.util.Log.e("FlydropClient", "Error opening stream for $uri", e)
+                            throw java.io.IOException("No se pudo leer el archivo: ${e.message}", e)
+                        } ?: throw java.io.IOException("No se pudo leer el archivo local: stream es null")
+
                         inputStream.use { input ->
+                            val buffer = ByteArray(65536)
+                            var uploaded = 0L
                             var read: Int
                             while (input.read(buffer).also { read = it } != -1) {
                                 sink.write(buffer, 0, read)
                                 uploaded += read
-                                if (fileSize > 0) {
-                                    onProgress?.invoke(uploaded.toFloat() / fileSize)
+                                if (fileSize > 0L && onProgress != null) {
+                                    try {
+                                        onProgress.invoke(uploaded.toFloat() / fileSize)
+                                    } catch (te: Throwable) {
+                                        android.util.Log.e("FlydropClient", "onProgress callback error", te)
+                                    }
                                 }
                             }
                         }
@@ -227,18 +252,20 @@ object FlydropClient {
                 val uploadUrl = "$baseUrl/upload?sessionId=$sessionId&fileId=$fileId&token=$token"
                 val uploadReq = Request.Builder()
                     .url(uploadUrl)
-                    .addHeader("Content-Type", mimeType)
-                    .addHeader("Content-Length", fileSize.toString())
                     .post(requestBody)
                     .build()
 
+                android.util.Log.i("FlydropClient", "upload executing: $uploadUrl")
                 val uploadResp = client.newCall(uploadReq).execute()
+                android.util.Log.i("FlydropClient", "upload response code=${uploadResp.code}")
                 if (uploadResp.isSuccessful) {
                     return@withContext Result.success(true)
                 } else {
                     lastError = Exception("FlyDrop error al subir: ${uploadResp.code}")
+                    android.util.Log.w("FlydropClient", "upload failed code=${uploadResp.code}, msg=${uploadResp.message}")
                 }
             } catch (e: Exception) {
+                android.util.Log.e("FlydropClient", "Exception during upload to $baseUrl", e)
                 lastError = e
             }
         }

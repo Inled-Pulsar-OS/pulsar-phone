@@ -34,9 +34,18 @@ class ShareActivity : AppCompatActivity() {
         handleShareIntent(intent)
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (PulsarPhoneApp.instance.isConfigured()) {
+            handleShareIntent(intent)
+        }
+    }
+
     private fun handleShareIntent(intent: Intent) {
         val action = intent.action
         val type = intent.type
+        android.util.Log.i("ShareActivity", "handleShareIntent action=$action, type=$type")
 
         when (action) {
             Intent.ACTION_SEND -> {
@@ -44,17 +53,31 @@ class ShareActivity : AppCompatActivity() {
                     val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
                     sendText(sharedText)
                 } else {
-                    val fileUri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                    val fileUri: Uri? = intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                        ?: intent.clipData?.let { if (it.itemCount > 0) it.getItemAt(0).uri else null }
+                        ?: intent.data
+                    android.util.Log.i("ShareActivity", "handleShareIntent fileUri=$fileUri")
                     if (fileUri != null) {
-                        sendSingleFile(fileUri, type ?: "application/octet-stream")
+                        val resolvedMime = contentResolver.getType(fileUri) ?: type ?: "application/octet-stream"
+                        sendSingleFile(fileUri, resolvedMime)
                     } else {
+                        android.util.Log.w("ShareActivity", "No fileUri found in intent, finishing")
                         finish()
                     }
                 }
             }
             Intent.ACTION_SEND_MULTIPLE -> {
-                val fileUris = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-                if (!fileUris.isNullOrEmpty()) {
+                val fileUris: List<Uri> = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                    ?: run {
+                        val list = mutableListOf<Uri>()
+                        intent.clipData?.let { cd ->
+                            for (i in 0 until cd.itemCount) {
+                                cd.getItemAt(i).uri?.let { list.add(it) }
+                            }
+                        }
+                        list
+                    }
+                if (fileUris.isNotEmpty()) {
                     sendMultipleFiles(fileUris)
                 } else {
                     finish()
@@ -79,6 +102,7 @@ class ShareActivity : AppCompatActivity() {
 
     private fun sendSingleFile(uri: Uri, mimeType: String) {
         val (name, size) = getFileMeta(uri)
+        android.util.Log.i("ShareActivity", "sendSingleFile name=$name, size=$size, mimeType=$mimeType, uri=$uri")
         binding.shareSubtitle.text = getString(es.inled.pulsarphone.R.string.sending_file, name, formatSize(size))
 
         lifecycleScope.launch {
@@ -89,9 +113,13 @@ class ShareActivity : AppCompatActivity() {
                 mimeType = mimeType,
                 fileSize = size
             ) { progress ->
-                binding.shareProgress.isIndeterminate = false
-                binding.shareProgress.progress = (progress * 100).toInt()
+                runOnUiThread {
+                    binding.shareProgress.isIndeterminate = false
+                    binding.shareProgress.progress = (progress * 100).toInt()
+                }
             }
+
+            android.util.Log.i("ShareActivity", "sendFileToFlydrop result=${res.isSuccess}, error=${res.exceptionOrNull()}")
 
             if (res.isSuccess) {
                 Toast.makeText(this@ShareActivity, getString(es.inled.pulsarphone.R.string.file_sent_success, name), Toast.LENGTH_SHORT).show()
@@ -110,7 +138,18 @@ class ShareActivity : AppCompatActivity() {
                 val (name, size) = getFileMeta(uri)
                 val mime = contentResolver.getType(uri) ?: "application/octet-stream"
                 binding.shareSubtitle.text = getString(es.inled.pulsarphone.R.string.sending_file, name, formatSize(size))
-                val res = FlydropClient.sendFileToFlydrop(this@ShareActivity, uri, name, mime, size)
+                val res = FlydropClient.sendFileToFlydrop(
+                    context = this@ShareActivity,
+                    uri = uri,
+                    fileName = name,
+                    mimeType = mime,
+                    fileSize = size
+                ) { progress ->
+                    runOnUiThread {
+                        binding.shareProgress.isIndeterminate = false
+                        binding.shareProgress.progress = (progress * 100).toInt()
+                    }
+                }
                 if (res.isSuccess) sent++
             }
             Toast.makeText(this@ShareActivity, getString(es.inled.pulsarphone.R.string.multiple_files_sent_success, sent, uris.size), Toast.LENGTH_SHORT).show()
@@ -121,12 +160,36 @@ class ShareActivity : AppCompatActivity() {
     private fun getFileMeta(uri: Uri): Pair<String, Long> {
         var name = "archivo"
         var size = 0L
-        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-            if (cursor.moveToFirst()) {
-                if (nameIndex != -1) name = cursor.getString(nameIndex) ?: name
-                if (sizeIndex != -1) size = cursor.getLong(sizeIndex)
+        try {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (cursor.moveToFirst()) {
+                    if (nameIndex != -1) name = cursor.getString(nameIndex) ?: name
+                    if (sizeIndex != -1 && !cursor.isNull(sizeIndex)) {
+                        size = cursor.getLong(sizeIndex)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ShareActivity", "contentResolver.query error", e)
+        }
+
+        if (size <= 0L) {
+            try {
+                contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
+                    val len = afd.length
+                    if (len > 0L) size = len
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ShareActivity", "openAssetFileDescriptor error", e)
+            }
+        }
+
+        if (name == "archivo") {
+            uri.lastPathSegment?.let { segment ->
+                val clean = segment.substringAfterLast("/")
+                if (clean.isNotBlank()) name = clean
             }
         }
         return Pair(name, size)
