@@ -34,6 +34,7 @@ class ShellActivity : AppCompatActivity() {
     private var currentFontSize: Int = 20
     private var isCtrlLatched: Boolean = false
     private var isAltLatched: Boolean = false
+    private var isWinLatched: Boolean = false
 
     inner class WebAppInterface {
         @JavascriptInterface
@@ -41,6 +42,7 @@ class ShellActivity : AppCompatActivity() {
             runOnUiThread {
                 setCtrlLatch(false)
                 setAltLatch(false)
+                setWinLatch(false)
             }
         }
     }
@@ -144,50 +146,84 @@ class ShellActivity : AppCompatActivity() {
             (function() {
                 window._pulsarCtrlActive = ${isCtrlLatched};
                 window._pulsarAltActive = ${isAltLatched};
+                window._pulsarWinActive = ${isWinLatched};
+
                 window._pulsarSetCtrlActive = function(val) { window._pulsarCtrlActive = !!val; };
                 window._pulsarSetAltActive = function(val) { window._pulsarAltActive = !!val; };
+                window._pulsarSetWinActive = function(val) { window._pulsarWinActive = !!val; };
 
-                if (!window._pulsarInstalled) {
-                    window._pulsarInstalled = true;
+                function hookTerminal() {
+                    if (!window.term || !window.term._core || !window.term._core.coreService) {
+                        setTimeout(hookTerminal, 100);
+                        return;
+                    }
+                    if (window._pulsarHooked) return;
+                    window._pulsarHooked = true;
 
-                    document.addEventListener('keydown', function(e) {
-                        if (window._pulsarCtrlActive && !e.ctrlKey) {
-                            var key = e.key;
-                            if (key && key.length === 1) {
-                                var code = key.toUpperCase().charCodeAt(0);
-                                if (code >= 65 && code <= 90) {
-                                    e.preventDefault();
-                                    e.stopPropagation();
+                    var cs = window.term._core.coreService;
+                    var origTrigger = cs.triggerDataEvent.bind(cs);
+
+                    cs.triggerDataEvent = function(data, wasUserInput) {
+                        if (window._pulsarCtrlActive) {
+                            window._pulsarCtrlActive = false;
+                            if (window.PulsarNative && typeof window.PulsarNative.resetModifiers === 'function') {
+                                window.PulsarNative.resetModifiers();
+                            }
+                            if (typeof data === 'string' && data.length > 0) {
+                                if (data === '\u001b[A') return origTrigger('\u001b[1;5A', wasUserInput);
+                                if (data === '\u001b[B') return origTrigger('\u001b[1;5B', wasUserInput);
+                                if (data === '\u001b[C') return origTrigger('\u001b[1;5C', wasUserInput);
+                                if (data === '\u001b[D') return origTrigger('\u001b[1;5D', wasUserInput);
+
+                                var ch = data.charAt(0);
+                                var code = ch.toUpperCase().charCodeAt(0);
+                                if (code >= 64 && code <= 95) {
                                     var ctrlChar = String.fromCharCode(code - 64);
-                                    if (window.term && typeof window.term.input === 'function') {
-                                        window.term.input(ctrlChar);
-                                    } else if (window.term && window.term._core && window.term._core.coreService) {
-                                        window.term._core.coreService.triggerDataEvent(ctrlChar, true);
-                                    }
-                                    window._pulsarCtrlActive = false;
-                                    if (window.PulsarNative && typeof window.PulsarNative.resetModifiers === 'function') {
-                                        window.PulsarNative.resetModifiers();
-                                    }
+                                    return origTrigger(ctrlChar + data.slice(1), wasUserInput);
+                                } else if (code >= 97 && code <= 122) {
+                                    var ctrlChar = String.fromCharCode(code - 96);
+                                    return origTrigger(ctrlChar + data.slice(1), wasUserInput);
                                 }
                             }
-                        } else if (window._pulsarAltActive && !e.altKey) {
-                            var key = e.key;
-                            if (key && key.length === 1) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (window.term && typeof window.term.input === 'function') {
-                                    window.term.input('\u001b' + key);
-                                } else if (window.term && window.term._core && window.term._core.coreService) {
-                                    window.term._core.coreService.triggerDataEvent('\u001b' + key, true);
-                                }
-                                window._pulsarAltActive = false;
-                                if (window.PulsarNative && typeof window.PulsarNative.resetModifiers === 'function') {
-                                    window.PulsarNative.resetModifiers();
-                                }
+                        } else if (window._pulsarAltActive) {
+                            window._pulsarAltActive = false;
+                            if (window.PulsarNative && typeof window.PulsarNative.resetModifiers === 'function') {
+                                window.PulsarNative.resetModifiers();
+                            }
+                            if (typeof data === 'string' && data.length > 0) {
+                                if (data === '\u001b[A') return origTrigger('\u001b[1;3A', wasUserInput);
+                                if (data === '\u001b[B') return origTrigger('\u001b[1;3B', wasUserInput);
+                                if (data === '\u001b[C') return origTrigger('\u001b[1;3C', wasUserInput);
+                                if (data === '\u001b[D') return origTrigger('\u001b[1;3D', wasUserInput);
+                                return origTrigger('\u001b' + data, wasUserInput);
+                            }
+                        } else if (window._pulsarWinActive) {
+                            window._pulsarWinActive = false;
+                            if (window.PulsarNative && typeof window.PulsarNative.resetModifiers === 'function') {
+                                window.PulsarNative.resetModifiers();
+                            }
+                            if (typeof data === 'string' && data.length > 0) {
+                                return origTrigger('\u001b' + data, wasUserInput);
                             }
                         }
-                    }, true);
+                        return origTrigger(data, wasUserInput);
+                    };
+
+                    var ta = document.querySelector('.xterm-helper-textarea');
+                    if (ta) {
+                        ta.addEventListener('beforeinput', function(e) {
+                            if ((window._pulsarCtrlActive || window._pulsarAltActive || window._pulsarWinActive) && e.data) {
+                                e.preventDefault();
+                                var d = e.data;
+                                if (window.term && typeof window.term.input === 'function') {
+                                    window.term.input(d);
+                                }
+                            }
+                        }, true);
+                    }
                 }
+
+                hookTerminal();
             })();
         """.trimIndent()
         binding.webViewTerminal.evaluateJavascript(js, null)
@@ -196,10 +232,13 @@ class ShellActivity : AppCompatActivity() {
     private fun setCtrlLatch(active: Boolean) {
         isCtrlLatched = active
         if (active) {
+            if (isAltLatched) setAltLatch(false)
+            if (isWinLatched) setWinLatch(false)
             binding.btnModCtrl.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#1F6FEB"))
             binding.btnModCtrl.setTextColor(Color.WHITE)
             binding.btnModCtrl.strokeColor = ColorStateList.valueOf(Color.parseColor("#58A6FF"))
             binding.btnModCtrl.strokeWidth = 3
+            Toast.makeText(this, getString(R.string.modifier_ctrl_active), Toast.LENGTH_SHORT).show()
         } else {
             binding.btnModCtrl.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#21262D"))
             binding.btnModCtrl.setTextColor(Color.parseColor("#C9D1D9"))
@@ -215,10 +254,13 @@ class ShellActivity : AppCompatActivity() {
     private fun setAltLatch(active: Boolean) {
         isAltLatched = active
         if (active) {
+            if (isCtrlLatched) setCtrlLatch(false)
+            if (isWinLatched) setWinLatch(false)
             binding.btnModAlt.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#A371F7"))
             binding.btnModAlt.setTextColor(Color.WHITE)
             binding.btnModAlt.strokeColor = ColorStateList.valueOf(Color.parseColor("#BC8CFF"))
             binding.btnModAlt.strokeWidth = 3
+            Toast.makeText(this, getString(R.string.modifier_alt_active), Toast.LENGTH_SHORT).show()
         } else {
             binding.btnModAlt.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#21262D"))
             binding.btnModAlt.setTextColor(Color.parseColor("#C9D1D9"))
@@ -231,12 +273,35 @@ class ShellActivity : AppCompatActivity() {
         )
     }
 
+    private fun setWinLatch(active: Boolean) {
+        isWinLatched = active
+        if (active) {
+            if (isCtrlLatched) setCtrlLatch(false)
+            if (isAltLatched) setAltLatch(false)
+            binding.btnModWin.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#238636"))
+            binding.btnModWin.setTextColor(Color.WHITE)
+            binding.btnModWin.strokeColor = ColorStateList.valueOf(Color.parseColor("#3FB950"))
+            binding.btnModWin.strokeWidth = 3
+            Toast.makeText(this, getString(R.string.modifier_win_active), Toast.LENGTH_SHORT).show()
+        } else {
+            binding.btnModWin.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#21262D"))
+            binding.btnModWin.setTextColor(Color.parseColor("#C9D1D9"))
+            binding.btnModWin.strokeColor = ColorStateList.valueOf(Color.TRANSPARENT)
+            binding.btnModWin.strokeWidth = 0
+        }
+        binding.webViewTerminal.evaluateJavascript(
+            "if (typeof window._pulsarSetWinActive === 'function') window._pulsarSetWinActive($active);",
+            null
+        )
+    }
+
     private fun setupAccessoryKeys() {
         val wv = binding.webViewTerminal
 
         // Initial visual states for modifier buttons
         setCtrlLatch(false)
         setAltLatch(false)
+        setWinLatch(false)
 
         // Toggle Expandable Modifiers Toolbar
         binding.btnToggleModifiers.setOnClickListener {
@@ -270,8 +335,7 @@ class ShellActivity : AppCompatActivity() {
         }
 
         binding.btnModWin.setOnClickListener {
-            sendInputToTerminal("\u001b")
-            Toast.makeText(this, "Win/Meta (ESC)", Toast.LENGTH_SHORT).show()
+            setWinLatch(!isWinLatched)
         }
 
         binding.btnModFn.setOnClickListener {
@@ -349,6 +413,14 @@ class ShellActivity : AppCompatActivity() {
                     if (c.isLetterOrDigit()) {
                         sendInputToTerminal("\u001b$c")
                         setAltLatch(false)
+                        return@setOnKeyListener true
+                    }
+                }
+                if (isWinLatched) {
+                    val c = event.unicodeChar.toChar()
+                    if (c.isLetterOrDigit()) {
+                        sendInputToTerminal("\u001b$c")
+                        setWinLatch(false)
                         return@setOnKeyListener true
                     }
                 }

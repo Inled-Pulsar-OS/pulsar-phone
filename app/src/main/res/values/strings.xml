@@ -125,4 +125,7 @@
     <string name="font_size">Font size</string>
     <string name="font_size_toast">Terminal font size: %1$dpx</string>
     <string name="terminal_reload">Reload</string>
+    <string name="modifier_ctrl_active">CTRL active: press key to combine</string>
+    <string name="modifier_alt_active">ALT active: press key to combine</string>
+    <string name="modifier_win_active">WIN active: press key to combine</string>
 </resources>

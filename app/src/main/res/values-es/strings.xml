@@ -125,4 +125,7 @@
     <string name="font_size">Tamaño de letra</string>
     <string name="font_size_toast">Tamaño de letra: %1$dpx</string>
     <string name="terminal_reload">Recargar</string>
+    <string name="modifier_ctrl_active">CTRL activo: pulsa una tecla para combinar</string>
+    <string name="modifier_alt_active">ALT activo: pulsa una tecla para combinar</string>
+    <string name="modifier_win_active">WIN activo: pulsa una tecla para combinar</string>
 </resources>
