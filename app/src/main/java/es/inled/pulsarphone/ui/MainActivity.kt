@@ -3,6 +3,7 @@ package es.inled.pulsarphone.ui
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -105,6 +106,12 @@ class MainActivity : AppCompatActivity() {
         intent?.let { handleDeepLink(it) }
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val span = if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) 5 else 3
+        (binding.tabApps.appsRecyclerView.layoutManager as? GridLayoutManager)?.spanCount = span
+    }
+
     private fun setupNavigation() {
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
@@ -136,7 +143,8 @@ class MainActivity : AppCompatActivity() {
         adapter = AppAdapter { app ->
             launchPcApp(app)
         }
-        binding.tabApps.appsRecyclerView.layoutManager = GridLayoutManager(this, 3)
+        val span = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 5 else 3
+        binding.tabApps.appsRecyclerView.layoutManager = GridLayoutManager(this, span)
         binding.tabApps.appsRecyclerView.adapter = adapter
     }
 
@@ -263,7 +271,8 @@ class MainActivity : AppCompatActivity() {
         val options = ScanOptions().apply {
             setPrompt(getString(R.string.scan_qr_prompt))
             setBeepEnabled(true)
-            setOrientationLocked(false)
+            setOrientationLocked(true)
+            setCaptureActivity(PortraitCaptureActivity::class.java)
             setBarcodeImageEnabled(false)
         }
         qrScannerLauncher.launch(options)
@@ -275,7 +284,7 @@ class MainActivity : AppCompatActivity() {
         val activeId = PulsarPhoneApp.instance.getActiveDeviceId()
 
         binding.tabDevices.tvActivePcName.text = cfg.pcAlias
-        binding.tabDevices.tvActivePcDetails.text = "IP: ${cfg.pcIp} • Puerto: ${cfg.pcPort}"
+        binding.tabDevices.tvActivePcDetails.text = getString(R.string.device_details_format, cfg.pcIp, cfg.pcPort)
 
         binding.tabDevices.containerSavedDevices.removeAllViews()
 
@@ -297,7 +306,7 @@ class MainActivity : AppCompatActivity() {
 
             val isActive = dev.id == activeId || (activeId == null && dev == devices.first())
             if (isActive) {
-                itemBinding.btnConnectThisDevice.text = "ACTIVO"
+                itemBinding.btnConnectThisDevice.text = getString(R.string.device_active_badge)
                 itemBinding.btnConnectThisDevice.isEnabled = false
                 itemBinding.btnConnectThisDevice.setIconResource(android.R.drawable.checkbox_on_background)
             } else {

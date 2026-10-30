@@ -2,8 +2,8 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
-        android:id="@+id/action_clear"
-        android:title="@string/terminal_clear"
-        android:icon="@android:drawable/ic_menu_delete"
+        android:id="@+id/action_reload"
+        android:title="Reload"
+        android:icon="@android:drawable/ic_popup_sync"
         app:showAsAction="ifRoom" />
 </menu>

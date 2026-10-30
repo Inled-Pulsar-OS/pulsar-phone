@@ -112,4 +112,12 @@
     <string name="hint_pc_alias">Nombre / Alias del PC (ej: Mi Portátil)</string>
     <string name="hint_token">Token de autenticación</string>
     <string name="btn_connect_device">Conectar</string>
+    <string name="device_active_badge">Activo</string>
+    <string name="device_details_format">IP: %1$s • Puerto: %2$d</string>
+    <string name="tools_watch_pc_desc">Escritorio completo y sonido PulseAudio en vivo</string>
+    <string name="tools_cast_phone_desc">Proyecta la pantalla del móvil en una ventana del PC</string>
+    <string name="tools_terminal_desc">Consola bash interactiva (xterm) a pantalla completa</string>
+    <string name="tools_clipboard_desc">Copia el texto del teléfono al portapapeles del PC</string>
+    <string name="tools_files_desc">Envía fotos o documentos directamente a FlyDrop</string>
+    <string name="tools_notifications_desc">Reenvía tus avisos al centro de notificaciones de Pulsar OS</string>
 </resources>

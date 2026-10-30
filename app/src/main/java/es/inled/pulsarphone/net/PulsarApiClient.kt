@@ -380,6 +380,28 @@ object PulsarApiClient {
         }
     }
 
+    suspend fun startTerminalSession(): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("${getBaseUrl()}/api/terminal/start")
+                .header("X-Pulsar-Token", getToken())
+                .post("{}".toRequestBody(jsonMediaType))
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    return@withContext Result.failure(Exception("HTTP ${resp.code}: ${resp.message}"))
+                }
+                val body = resp.body?.string() ?: ""
+                val json = JSONObject(body)
+                val port = json.optInt("port", 7681)
+                Result.success(port)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun executeShellCommand(command: String, cwd: String? = null): Result<es.inled.pulsarphone.data.ShellResult> = withContext(Dispatchers.IO) {
         try {
             val url = "${getBaseUrl()}/api/shell/exec"

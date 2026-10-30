@@ -1,11 +1,16 @@
 package es.inled.pulsarphone.ui
 
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Bitmap
 import android.os.Bundle
-import android.text.Spannable
-import android.text.SpannableStringBuilder
-import android.text.style.ForegroundColorSpan
-import android.view.inputmethod.EditorInfo
-import android.widget.Toast
+import android.view.KeyEvent
+import android.view.View
+import android.view.inputmethod.InputMethodManager
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import es.inled.pulsarphone.PulsarPhoneApp
@@ -17,8 +22,9 @@ import kotlinx.coroutines.launch
 class ShellActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityShellBinding
-    private var isExecuting: Boolean = false
+    private var terminalUrl: String? = null
 
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityShellBinding.inflate(layoutInflater)
@@ -34,170 +40,152 @@ class ShellActivity : AppCompatActivity() {
         binding.toolbarShell.inflateMenu(R.menu.menu_shell)
         binding.toolbarShell.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                R.id.action_clear -> {
-                    binding.tvTerminalOutput.text = getString(R.string.terminal_empty)
+                R.id.action_reload -> {
+                    loadTerminal()
                     true
                 }
                 else -> false
             }
         }
 
-        setupQuickChips()
-        setupInput()
+        setupWebView()
+        setupAccessoryKeys()
+        loadTerminal()
     }
 
-    private fun setupQuickChips() {
-        binding.chipLs.setOnClickListener { execute("ls -la") }
-        binding.chipTop.setOnClickListener { execute("top -bn1 | head -n 25") }
-        binding.chipDf.setOnClickListener { execute("df -h") }
-        binding.chipUptime.setOnClickListener { execute("uptime") }
-        binding.chipSystemctl.setOnClickListener { execute("systemctl list-units --state=running | head -n 30") }
-        binding.chipWhoami.setOnClickListener { execute("whoami && uname -a") }
-        binding.chipFree.setOnClickListener { execute("free -h") }
-    }
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        val wv = binding.webViewTerminal
+        val settings = wv.settings
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.databaseEnabled = true
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
+        settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
-    private fun setupInput() {
-        binding.btnExecCommand.setOnClickListener {
-            val cmd = binding.etCommandInput.text.toString().trim()
-            if (cmd.isNotEmpty()) {
-                execute(cmd)
+        wv.isFocusable = true
+        wv.isFocusableInTouchMode = true
+        wv.requestFocus()
+
+        wv.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                binding.pbTerminalLoading.visibility = View.VISIBLE
+                binding.tvTerminalError.visibility = View.GONE
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                binding.pbTerminalLoading.visibility = View.GONE
+                wv.requestFocus()
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                errorCode: Int,
+                description: String?,
+                failingUrl: String?
+            ) {
+                binding.pbTerminalLoading.visibility = View.GONE
+                binding.tvTerminalError.visibility = View.VISIBLE
+                binding.tvTerminalError.text = "Error loading terminal: $description\n\nEnsure ttyd is running on PC."
             }
         }
 
-        binding.etCommandInput.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE) {
-                val cmd = binding.etCommandInput.text.toString().trim()
-                if (cmd.isNotEmpty()) {
-                    execute(cmd)
+        wv.webChromeClient = WebChromeClient()
+    }
+
+    private fun setupAccessoryKeys() {
+        val wv = binding.webViewTerminal
+
+        binding.btnKeyEsc.setOnClickListener {
+            sendKeyToTerminal(KeyEvent.KEYCODE_ESCAPE, "\\u001b")
+        }
+
+        binding.btnKeyTab.setOnClickListener {
+            sendKeyToTerminal(KeyEvent.KEYCODE_TAB, "\\t")
+        }
+
+        binding.btnKeyCtrlC.setOnClickListener {
+            // Sends SIGINT (0x03 / Ctrl+C) to active shell process in xterm
+            wv.evaluateJavascript(
+                """
+                (function() {
+                    if (window.term) {
+                        window.term.write('\x03');
+                    } else {
+                        var e = new KeyboardEvent('keydown', {key: 'c', ctrlKey: true, keyCode: 67});
+                        document.dispatchEvent(e);
+                    }
+                })();
+                """.trimIndent(), null
+            )
+        }
+
+        binding.btnKeyUp.setOnClickListener {
+            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_UP, "\\u001b[A")
+        }
+
+        binding.btnKeyDown.setOnClickListener {
+            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_DOWN, "\\u001b[B")
+        }
+
+        binding.btnKeyLeft.setOnClickListener {
+            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_LEFT, "\\u001b[D")
+        }
+
+        binding.btnKeyRight.setOnClickListener {
+            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_RIGHT, "\\u001b[C")
+        }
+
+        binding.btnToggleKeyboard.setOnClickListener {
+            wv.requestFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
+        }
+    }
+
+    private fun sendKeyToTerminal(keyCode: Int, ansiSequence: String) {
+        val wv = binding.webViewTerminal
+        wv.requestFocus()
+
+        // 1. Try dispatching native Android key events
+        wv.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        wv.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+
+        // 2. Also inject directly into xterm instance if available
+        wv.evaluateJavascript(
+            """
+            (function() {
+                if (window.term) {
+                    window.term.write('$ansiSequence');
                 }
-                true
-            } else {
-                false
-            }
-        }
+            })();
+            """.trimIndent(), null
+        )
     }
 
-    private fun execute(command: String) {
-        if (isExecuting) {
-            Toast.makeText(this, "A command is already executing...", Toast.LENGTH_SHORT).show()
-            return
-        }
+    private fun loadTerminal() {
+        binding.pbTerminalLoading.visibility = View.VISIBLE
+        binding.tvTerminalError.visibility = View.GONE
 
-        isExecuting = true
-        binding.btnExecCommand.isEnabled = false
-        binding.etCommandInput.setText("")
-
-        appendTerminalCommand(command)
-
+        val cfg = PulsarPhoneApp.instance.getConfig()
         lifecycleScope.launch {
-            val res = PulsarApiClient.executeShellCommand(command)
-            isExecuting = false
-            binding.btnExecCommand.isEnabled = true
-
+            val res = PulsarApiClient.startTerminalSession()
             if (res.isSuccess) {
-                val out = res.getOrNull()
-                if (out != null) {
-                    appendTerminalOutput(out.stdout, out.stderr, out.exitCode)
-                }
+                val port = res.getOrDefault(7681)
+                terminalUrl = "http://${cfg.pcIp}:$port"
+                binding.webViewTerminal.loadUrl(terminalUrl!!)
             } else {
+                binding.pbTerminalLoading.visibility = View.GONE
+                binding.tvTerminalError.visibility = View.VISIBLE
                 val err = res.exceptionOrNull()?.message ?: "Unknown error"
-                appendTerminalError("Connection error: $err")
+                binding.tvTerminalError.text = "Failed to connect to PC terminal service:\n$err"
             }
         }
     }
 
-    private fun appendTerminalCommand(command: String) {
-        val currentText = binding.tvTerminalOutput.text
-        val ssb = if (currentText.toString() == getString(R.string.terminal_empty)) {
-            SpannableStringBuilder()
-        } else {
-            SpannableStringBuilder(currentText).append("\n\n")
-        }
-
-        val prompt = "$ "
-        val promptStart = ssb.length
-        ssb.append(prompt)
-        ssb.setSpan(
-            ForegroundColorSpan(0xFF2EA043.toInt()), // Green
-            promptStart,
-            ssb.length,
-            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-
-        val cmdStart = ssb.length
-        ssb.append(command)
-        ssb.setSpan(
-            ForegroundColorSpan(0xFFFFFFFF.toInt()), // White
-            cmdStart,
-            ssb.length,
-            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-
-        binding.tvTerminalOutput.text = ssb
-        scrollToBottom()
-    }
-
-    private fun appendTerminalOutput(stdout: String, stderr: String, exitCode: Int) {
-        val ssb = SpannableStringBuilder(binding.tvTerminalOutput.text)
-
-        if (stdout.isNotEmpty()) {
-            ssb.append("\n")
-            val start = ssb.length
-            ssb.append(stdout.trimEnd())
-            ssb.setSpan(
-                ForegroundColorSpan(0xFFE6EDF3.toInt()), // Light gray
-                start,
-                ssb.length,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-        }
-
-        if (stderr.isNotEmpty()) {
-            ssb.append("\n")
-            val start = ssb.length
-            ssb.append(stderr.trimEnd())
-            ssb.setSpan(
-                ForegroundColorSpan(0xFFF85149.toInt()), // Red
-                start,
-                ssb.length,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-        }
-
-        if (exitCode != 0) {
-            ssb.append("\n")
-            val start = ssb.length
-            ssb.append("[Process exited with code $exitCode]")
-            ssb.setSpan(
-                ForegroundColorSpan(0xFFD29922.toInt()), // Amber
-                start,
-                ssb.length,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-        }
-
-        binding.tvTerminalOutput.text = ssb
-        scrollToBottom()
-    }
-
-    private fun appendTerminalError(error: String) {
-        val ssb = SpannableStringBuilder(binding.tvTerminalOutput.text)
-        ssb.append("\n")
-        val start = ssb.length
-        ssb.append(error)
-        ssb.setSpan(
-            ForegroundColorSpan(0xFFF85149.toInt()),
-            start,
-            ssb.length,
-            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-        binding.tvTerminalOutput.text = ssb
-        scrollToBottom()
-    }
-
-    private fun scrollToBottom() {
-        binding.scrollTerminal.post {
-            binding.scrollTerminal.fullScroll(android.view.View.FOCUS_DOWN)
-        }
+    override fun onDestroy() {
+        super.onDestroy()
+        binding.webViewTerminal.destroy()
     }
 }

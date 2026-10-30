@@ -112,4 +112,12 @@
     <string name="hint_pc_alias">PC Name / Alias (e.g. My Laptop)</string>
     <string name="hint_token">Authentication Token</string>
     <string name="btn_connect_device">Connect</string>
+    <string name="device_active_badge">Active</string>
+    <string name="device_details_format">IP: %1$s • Port: %2$d</string>
+    <string name="tools_watch_pc_desc">Full desktop and live PulseAudio sound</string>
+    <string name="tools_cast_phone_desc">Cast phone screen into a PC desktop window</string>
+    <string name="tools_terminal_desc">Interactive bash console (xterm) with full screen support</string>
+    <string name="tools_clipboard_desc">Copy phone text to PC clipboard</string>
+    <string name="tools_files_desc">Send photos or documents directly to FlyDrop</string>
+    <string name="tools_notifications_desc">Relay phone notifications to Pulsar OS desktop</string>
 </resources>

@@ -30,6 +30,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "17"
@@ -37,9 +38,15 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
@@ -56,6 +63,6 @@ dependencies {
     // QR Code Scanner
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
-    // Embedded WireGuard Tunnel VPN Engine
-    implementation("com.wireguard.android:tunnel:1.0.20230706")
+    // Embedded WireGuard Tunnel VPN Engine (16 KB page-size aligned)
+    implementation("com.wireguard.android:tunnel:1.0.20260102")
 }

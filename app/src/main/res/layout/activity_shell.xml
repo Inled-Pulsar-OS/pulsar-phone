@@ -28,158 +28,152 @@
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Terminal Output Area -->
-        <ScrollView
-            android:id="@+id/scrollTerminal"
+        <!-- Loading Indicator -->
+        <ProgressBar
+            android:id="@+id/pbTerminalLoading"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+        <!-- Interactive xterm.js WebView -->
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:fillViewport="true"
-            android:padding="12dp">
+            android:background="#0D1117">
+
+            <WebView
+                android:id="@+id/webViewTerminal"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#0D1117" />
 
             <TextView
-                android:id="@+id/tvTerminalOutput"
+                android:id="@+id/tvTerminalError"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="monospace"
-                android:lineSpacingExtra="3dp"
-                android:text="@string/terminal_empty"
-                android:textColor="#58A6FF"
-                android:textSize="13sp" />
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:padding="24dp"
+                android:textColor="#F85149"
+                android:textSize="14sp"
+                android:visibility="gone" />
 
-        </ScrollView>
+        </FrameLayout>
 
-        <!-- Quick Command Chips Bar -->
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#161B22"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="6dp"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/chipsContainer"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/chipLs"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="6dp"
-                    android:paddingHorizontal="10dp"
-                    android:text="ls -la"
-                    android:textSize="12sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/chipTop"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="6dp"
-                    android:paddingHorizontal="10dp"
-                    android:text="top"
-                    android:textSize="12sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/chipDf"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="6dp"
-                    android:paddingHorizontal="10dp"
-                    android:text="df -h"
-                    android:textSize="12sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/chipUptime"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="6dp"
-                    android:paddingHorizontal="10dp"
-                    android:text="uptime"
-                    android:textSize="12sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/chipSystemctl"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="6dp"
-                    android:paddingHorizontal="10dp"
-                    android:text="systemctl"
-                    android:textSize="12sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/chipWhoami"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="6dp"
-                    android:paddingHorizontal="10dp"
-                    android:text="whoami"
-                    android:textSize="12sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/chipFree"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="6dp"
-                    android:paddingHorizontal="10dp"
-                    android:text="free -h"
-                    android:textSize="12sp" />
-
-            </LinearLayout>
-
-        </HorizontalScrollView>
-
-        <!-- Command Input Row -->
+        <!-- Terminal Accessory Keys Bar -->
         <LinearLayout
+            android:id="@+id/accessoryBar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="44dp"
             android:background="#161B22"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:fontFamily="monospace"
-                android:text="$"
-                android:textColor="#2EA043"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/etCommandInput"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:background="@null"
-                android:fontFamily="monospace"
-                android:hint="@string/terminal_hint"
-                android:imeOptions="actionSend"
-                android:inputType="textNoSuggestions|textVisiblePassword"
-                android:maxLines="3"
-                android:textColor="#E6EDF3"
-                android:textColorHint="#484F58"
-                android:textSize="14sp" />
+            android:paddingHorizontal="4dp">
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnExecCommand"
-                style="@style/Widget.Material3.Button.IconButton.Filled"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="8dp"
-                app:icon="@android:drawable/ic_menu_send" />
+                android:id="@+id/btnKeyEsc"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:padding="0dp"
+                android:text="ESC"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnKeyTab"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:padding="0dp"
+                android:text="TAB"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnKeyCtrlC"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:padding="0dp"
+                android:text="^C"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnKeyLeft"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:padding="0dp"
+                android:text="◀"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnKeyUp"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:padding="0dp"
+                android:text="▲"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnKeyDown"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:padding="0dp"
+                android:text="▼"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnKeyRight"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:padding="0dp"
+                android:text="▶"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnToggleKeyboard"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="40dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="2dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:padding="0dp"
+                android:text="⌨"
+                android:textSize="14sp" />
 
         </LinearLayout>
 
