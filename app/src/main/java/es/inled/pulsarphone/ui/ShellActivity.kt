@@ -2,11 +2,14 @@ package es.inled.pulsarphone.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -22,6 +25,7 @@ import es.inled.pulsarphone.R
 import es.inled.pulsarphone.databinding.ActivityShellBinding
 import es.inled.pulsarphone.net.PulsarApiClient
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class ShellActivity : AppCompatActivity() {
 
@@ -30,6 +34,16 @@ class ShellActivity : AppCompatActivity() {
     private var currentFontSize: Int = 20
     private var isCtrlLatched: Boolean = false
     private var isAltLatched: Boolean = false
+
+    inner class WebAppInterface {
+        @JavascriptInterface
+        fun resetModifiers() {
+            runOnUiThread {
+                setCtrlLatch(false)
+                setAltLatch(false)
+            }
+        }
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,7 +116,10 @@ class ShellActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 binding.pbTerminalLoading.visibility = View.GONE
                 wv.requestFocus()
-                view?.postDelayed({ applyFontSizeToWebView() }, 300)
+                view?.postDelayed({
+                    applyFontSizeToWebView()
+                    injectTerminalHelperScript()
+                }, 300)
             }
 
             override fun onReceivedError(
@@ -118,33 +135,143 @@ class ShellActivity : AppCompatActivity() {
             }
         }
 
+        wv.addJavascriptInterface(WebAppInterface(), "PulsarNative")
         wv.webChromeClient = WebChromeClient()
+    }
+
+    private fun injectTerminalHelperScript() {
+        val js = """
+            (function() {
+                window._pulsarCtrlActive = ${isCtrlLatched};
+                window._pulsarAltActive = ${isAltLatched};
+                window._pulsarSetCtrlActive = function(val) { window._pulsarCtrlActive = !!val; };
+                window._pulsarSetAltActive = function(val) { window._pulsarAltActive = !!val; };
+
+                if (!window._pulsarInstalled) {
+                    window._pulsarInstalled = true;
+
+                    document.addEventListener('keydown', function(e) {
+                        if (window._pulsarCtrlActive && !e.ctrlKey) {
+                            var key = e.key;
+                            if (key && key.length === 1) {
+                                var code = key.toUpperCase().charCodeAt(0);
+                                if (code >= 65 && code <= 90) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    var ctrlChar = String.fromCharCode(code - 64);
+                                    if (window.term && typeof window.term.input === 'function') {
+                                        window.term.input(ctrlChar);
+                                    } else if (window.term && window.term._core && window.term._core.coreService) {
+                                        window.term._core.coreService.triggerDataEvent(ctrlChar, true);
+                                    }
+                                    window._pulsarCtrlActive = false;
+                                    if (window.PulsarNative && typeof window.PulsarNative.resetModifiers === 'function') {
+                                        window.PulsarNative.resetModifiers();
+                                    }
+                                }
+                            }
+                        } else if (window._pulsarAltActive && !e.altKey) {
+                            var key = e.key;
+                            if (key && key.length === 1) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (window.term && typeof window.term.input === 'function') {
+                                    window.term.input('\u001b' + key);
+                                } else if (window.term && window.term._core && window.term._core.coreService) {
+                                    window.term._core.coreService.triggerDataEvent('\u001b' + key, true);
+                                }
+                                window._pulsarAltActive = false;
+                                if (window.PulsarNative && typeof window.PulsarNative.resetModifiers === 'function') {
+                                    window.PulsarNative.resetModifiers();
+                                }
+                            }
+                        }
+                    }, true);
+                }
+            })();
+        """.trimIndent()
+        binding.webViewTerminal.evaluateJavascript(js, null)
+    }
+
+    private fun setCtrlLatch(active: Boolean) {
+        isCtrlLatched = active
+        if (active) {
+            binding.btnModCtrl.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#1F6FEB"))
+            binding.btnModCtrl.setTextColor(Color.WHITE)
+            binding.btnModCtrl.strokeColor = ColorStateList.valueOf(Color.parseColor("#58A6FF"))
+            binding.btnModCtrl.strokeWidth = 3
+        } else {
+            binding.btnModCtrl.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#21262D"))
+            binding.btnModCtrl.setTextColor(Color.parseColor("#C9D1D9"))
+            binding.btnModCtrl.strokeColor = ColorStateList.valueOf(Color.TRANSPARENT)
+            binding.btnModCtrl.strokeWidth = 0
+        }
+        binding.webViewTerminal.evaluateJavascript(
+            "if (typeof window._pulsarSetCtrlActive === 'function') window._pulsarSetCtrlActive($active);",
+            null
+        )
+    }
+
+    private fun setAltLatch(active: Boolean) {
+        isAltLatched = active
+        if (active) {
+            binding.btnModAlt.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#A371F7"))
+            binding.btnModAlt.setTextColor(Color.WHITE)
+            binding.btnModAlt.strokeColor = ColorStateList.valueOf(Color.parseColor("#BC8CFF"))
+            binding.btnModAlt.strokeWidth = 3
+        } else {
+            binding.btnModAlt.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#21262D"))
+            binding.btnModAlt.setTextColor(Color.parseColor("#C9D1D9"))
+            binding.btnModAlt.strokeColor = ColorStateList.valueOf(Color.TRANSPARENT)
+            binding.btnModAlt.strokeWidth = 0
+        }
+        binding.webViewTerminal.evaluateJavascript(
+            "if (typeof window._pulsarSetAltActive === 'function') window._pulsarSetAltActive($active);",
+            null
+        )
     }
 
     private fun setupAccessoryKeys() {
         val wv = binding.webViewTerminal
+
+        // Initial visual states for modifier buttons
+        setCtrlLatch(false)
+        setAltLatch(false)
 
         // Toggle Expandable Modifiers Toolbar
         binding.btnToggleModifiers.setOnClickListener {
             val isVisible = binding.scrollModifiersBar.visibility == View.VISIBLE
             binding.scrollModifiersBar.visibility = if (isVisible) View.GONE else View.VISIBLE
             binding.btnToggleModifiers.text = if (isVisible) "MOD ▾" else "MOD ▴"
+            if (!isVisible) {
+                binding.btnToggleModifiers.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#30363D"))
+                binding.btnToggleModifiers.setTextColor(Color.WHITE)
+            } else {
+                binding.btnToggleModifiers.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#21262D"))
+                binding.btnToggleModifiers.setTextColor(Color.parseColor("#C9D1D9"))
+            }
         }
 
         // Latch Modifiers
-        binding.btnModCtrl.isCheckable = true
-        binding.btnModCtrl.addOnCheckedChangeListener { _, isChecked ->
-            isCtrlLatched = isChecked
+        binding.btnModCtrl.setOnClickListener {
+            setCtrlLatch(!isCtrlLatched)
+        }
+        binding.btnModCtrl.setOnLongClickListener {
+            showCtrlCombinationsDialog()
+            true
         }
 
-        binding.btnModAlt.isCheckable = true
-        binding.btnModAlt.addOnCheckedChangeListener { _, isChecked ->
-            isAltLatched = isChecked
+        binding.btnModAlt.setOnClickListener {
+            setAltLatch(!isAltLatched)
+        }
+        binding.btnModAlt.setOnLongClickListener {
+            showAltCombinationsDialog()
+            true
         }
 
         binding.btnModWin.setOnClickListener {
-            sendAnsiSequence("\\u001b")
-            Toast.makeText(this, "Win/Meta", Toast.LENGTH_SHORT).show()
+            sendInputToTerminal("\u001b")
+            Toast.makeText(this, "Win/Meta (ESC)", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnModFn.setOnClickListener {
@@ -152,51 +279,51 @@ class ShellActivity : AppCompatActivity() {
         }
 
         // Common Combinations
-        binding.btnModCtrlZ.setOnClickListener { sendAnsiSequence("\\x1a") }
-        binding.btnModCtrlD.setOnClickListener { sendAnsiSequence("\\x04") }
-        binding.btnModCtrlL.setOnClickListener { sendAnsiSequence("\\x0c") }
-        binding.btnModCtrlA.setOnClickListener { sendAnsiSequence("\\x01") }
-        binding.btnModCtrlE.setOnClickListener { sendAnsiSequence("\\x05") }
+        binding.btnModCtrlZ.setOnClickListener { sendInputToTerminal("\u001a") }
+        binding.btnModCtrlD.setOnClickListener { sendInputToTerminal("\u0004") }
+        binding.btnModCtrlL.setOnClickListener { sendInputToTerminal("\u000c") }
+        binding.btnModCtrlA.setOnClickListener { sendInputToTerminal("\u0001") }
+        binding.btnModCtrlE.setOnClickListener { sendInputToTerminal("\u0005") }
 
         // Symbols
-        binding.btnModPipe.setOnClickListener { sendTextToTerminal("|") }
-        binding.btnModTilde.setOnClickListener { sendTextToTerminal("~") }
-        binding.btnModSlash.setOnClickListener { sendTextToTerminal("/") }
-        binding.btnModBackslash.setOnClickListener { sendTextToTerminal("\\") }
+        binding.btnModPipe.setOnClickListener { sendInputToTerminal("|") }
+        binding.btnModTilde.setOnClickListener { sendInputToTerminal("~") }
+        binding.btnModSlash.setOnClickListener { sendInputToTerminal("/") }
+        binding.btnModBackslash.setOnClickListener { sendInputToTerminal("\\") }
 
         // Home / End / Page Navigation
-        binding.btnModHome.setOnClickListener { sendAnsiSequence("\\u001b[H") }
-        binding.btnModEnd.setOnClickListener { sendAnsiSequence("\\u001b[F") }
-        binding.btnModPgUp.setOnClickListener { sendAnsiSequence("\\u001b[5~") }
-        binding.btnModPgDn.setOnClickListener { sendAnsiSequence("\\u001b[6~") }
+        binding.btnModHome.setOnClickListener { sendInputToTerminal("\u001b[H") }
+        binding.btnModEnd.setOnClickListener { sendInputToTerminal("\u001b[F") }
+        binding.btnModPgUp.setOnClickListener { sendInputToTerminal("\u001b[5~") }
+        binding.btnModPgDn.setOnClickListener { sendInputToTerminal("\u001b[6~") }
 
         // Primary Row Keys
         binding.btnKeyEsc.setOnClickListener {
-            sendKeyToTerminal(KeyEvent.KEYCODE_ESCAPE, "\\u001b")
+            sendInputToTerminal("\u001b")
         }
 
         binding.btnKeyTab.setOnClickListener {
-            sendKeyToTerminal(KeyEvent.KEYCODE_TAB, "\\t")
+            sendInputToTerminal("\t")
         }
 
         binding.btnKeyCtrlC.setOnClickListener {
-            sendAnsiSequence("\\x03")
+            sendInputToTerminal("\u0003")
         }
 
         binding.btnKeyUp.setOnClickListener {
-            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_UP, "\\u001b[A")
+            sendInputToTerminal("\u001b[A")
         }
 
         binding.btnKeyDown.setOnClickListener {
-            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_DOWN, "\\u001b[B")
+            sendInputToTerminal("\u001b[B")
         }
 
         binding.btnKeyLeft.setOnClickListener {
-            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_LEFT, "\\u001b[D")
+            sendInputToTerminal("\u001b[D")
         }
 
         binding.btnKeyRight.setOnClickListener {
-            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_RIGHT, "\\u001b[C")
+            sendInputToTerminal("\u001b[C")
         }
 
         binding.btnToggleKeyboard.setOnClickListener {
@@ -206,22 +333,22 @@ class ShellActivity : AppCompatActivity() {
         }
 
         // Intercept keys from soft/hard keyboard when Ctrl or Alt is latched
-        wv.setOnKeyListener { _, keyCode, event ->
+        wv.setOnKeyListener { _, _, event ->
             if (event.action == KeyEvent.ACTION_DOWN) {
                 if (isCtrlLatched) {
                     val unicode = event.unicodeChar
                     if ((unicode in 97..122) || (unicode in 65..90)) {
-                        val ctrlCode = Character.toUpperCase(unicode.toChar()) - '@'
-                        sendAnsiSequence("\\x${Integer.toHexString(ctrlCode).padStart(2, '0')}")
-                        binding.btnModCtrl.isChecked = false
+                        val ctrlCode = Character.toUpperCase(unicode.toChar()).code - 64
+                        sendInputToTerminal(ctrlCode.toChar().toString())
+                        setCtrlLatch(false)
                         return@setOnKeyListener true
                     }
                 }
                 if (isAltLatched) {
                     val c = event.unicodeChar.toChar()
                     if (c.isLetterOrDigit()) {
-                        sendAnsiSequence("\\u001b$c")
-                        binding.btnModAlt.isChecked = false
+                        sendInputToTerminal("\u001b$c")
+                        setAltLatch(false)
                         return@setOnKeyListener true
                     }
                 }
@@ -233,66 +360,88 @@ class ShellActivity : AppCompatActivity() {
     private fun showFunctionKeysDialog() {
         val fKeys = Array(12) { "F${it + 1}" }
         val fSequences = arrayOf(
-            "\\u001bOP", "\\u001bOQ", "\\u001bOR", "\\u001bOS",
-            "\\u001b[15~", "\\u001b[17~", "\\u001b[18~", "\\u001b[19~",
-            "\\u001b[20~", "\\u001b[21~", "\\u001b[23~", "\\u001b[24~"
+            "\u001bOP", "\u001bOQ", "\u001bOR", "\u001bOS",
+            "\u001b[15~", "\u001b[17~", "\u001b[18~", "\u001b[19~",
+            "\u001b[20~", "\u001b[21~", "\u001b[23~", "\u001b[24~"
         )
         MaterialAlertDialogBuilder(this)
             .setTitle("Function Keys (Fn)")
             .setItems(fKeys) { _, which ->
-                sendAnsiSequence(fSequences[which])
+                sendInputToTerminal(fSequences[which])
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
-    private fun sendAnsiSequence(seq: String) {
-        val wv = binding.webViewTerminal
-        wv.requestFocus()
-        wv.evaluateJavascript(
-            """
-            (function() {
-                if (window.term) {
-                    window.term.write('$seq');
-                }
-            })();
-            """.trimIndent(), null
+    private fun showCtrlCombinationsDialog() {
+        val items = arrayOf(
+            "^C (Interrupt / SIGINT)" to "\u0003",
+            "^Z (Suspend / SIGTSTP)" to "\u001a",
+            "^D (EOF / Exit)" to "\u0004",
+            "^L (Clear screen)" to "\u000c",
+            "^A (Start of line)" to "\u0001",
+            "^E (End of line)" to "\u0005",
+            "^K (Kill to end of line)" to "\u000b",
+            "^U (Kill line backward)" to "\u0015",
+            "^W (Kill word backward)" to "\u0017",
+            "^R (Reverse history search)" to "\u0012",
+            "^T (Transpose characters)" to "\u0014",
+            "^X (Extra command prefix)" to "\u0018",
+            "^\\ (Quit / SIGQUIT)" to "\u001c"
         )
+        val labels = items.map { it.first }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Control Combinations (CTRL+)")
+            .setItems(labels) { _, which ->
+                sendInputToTerminal(items[which].second)
+                setCtrlLatch(false)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
-    private fun sendTextToTerminal(text: String) {
-        val wv = binding.webViewTerminal
-        wv.requestFocus()
-        val escaped = text.replace("\\", "\\\\").replace("'", "\\'")
-        wv.evaluateJavascript(
-            """
-            (function() {
-                if (window.term) {
-                    window.term.write('$escaped');
-                }
-            })();
-            """.trimIndent(), null
+    private fun showAltCombinationsDialog() {
+        val items = arrayOf(
+            "Alt+B (Backward word)" to "\u001bb",
+            "Alt+F (Forward word)" to "\u001bf",
+            "Alt+D (Kill word forward)" to "\u001bd",
+            "Alt+Backspace (Kill word backward)" to "\u001b\u007f",
+            "Alt+. (Previous argument)" to "\u001b.",
+            "Alt+C (Capitalize word)" to "\u001bc",
+            "Alt+U (Uppercase word)" to "\u001bu",
+            "Alt+L (Lowercase word)" to "\u001bl"
         )
+        val labels = items.map { it.first }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Alt Combinations (ALT+)")
+            .setItems(labels) { _, which ->
+                sendInputToTerminal(items[which].second)
+                setAltLatch(false)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
-    private fun sendKeyToTerminal(keyCode: Int, ansiSequence: String) {
+    private fun sendInputToTerminal(data: String) {
         val wv = binding.webViewTerminal
-        wv.requestFocus()
-
-        // 1. Try dispatching native Android key events
-        wv.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-        wv.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
-
-        // 2. Also inject directly into xterm instance if available
-        wv.evaluateJavascript(
-            """
+        val json = JSONObject.quote(data)
+        val js = """
             (function() {
+                var d = $json;
                 if (window.term) {
-                    window.term.write('$ansiSequence');
+                    if (typeof window.term.input === 'function') {
+                        window.term.input(d);
+                    } else if (window.term._core && window.term._core.coreService) {
+                        window.term._core.coreService.triggerDataEvent(d, true);
+                    } else if (typeof window.term.paste === 'function') {
+                        window.term.paste(d);
+                    }
                 }
             })();
-            """.trimIndent(), null
-        )
+        """.trimIndent()
+        wv.post {
+            wv.evaluateJavascript(js, null)
+        }
     }
 
     private fun changeFontSize(delta: Int) {
