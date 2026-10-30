@@ -133,6 +133,22 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
+        binding.btnOpenTerminal.setOnClickListener {
+            if (!PulsarPhoneApp.instance.isConfigured()) {
+                Toast.makeText(this, getString(R.string.pc_not_paired), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            startActivity(Intent(this, ShellActivity::class.java))
+        }
+
+        binding.btnSwitchDevice.setOnClickListener {
+            showDeviceSwitcherDialog()
+        }
+
+        binding.pcInfoText.setOnClickListener {
+            showDeviceSwitcherDialog()
+        }
+
         binding.btnCastPhoneToPc.setOnClickListener {
             togglePhoneCastToPc()
         }
@@ -194,6 +210,66 @@ class MainActivity : AppCompatActivity() {
             setBarcodeImageEnabled(false)
         }
         qrScannerLauncher.launch(options)
+    }
+
+    private fun showDeviceSwitcherDialog() {
+        val devices = PulsarPhoneApp.instance.getSavedDevices()
+        val activeId = PulsarPhoneApp.instance.getActiveDeviceId()
+
+        if (devices.isEmpty()) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.devices_title)
+                .setMessage(R.string.scan_qr_prompt)
+                .setPositiveButton(R.string.btn_scan_qr) { _, _ -> startQrScanner() }
+                .setNegativeButton(R.string.btn_cancel, null)
+                .show()
+            return
+        }
+
+        val items = devices.map { d ->
+            val activeStr = if (d.id == activeId) " ★" else ""
+            "${d.pcAlias} (${d.pcIp})$activeStr"
+        }.toTypedArray()
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.devices_title)
+            .setItems(items) { _, which ->
+                val selected = devices[which]
+                if (selected.id != activeId) {
+                    PulsarPhoneApp.instance.setActiveDevice(selected.id)
+                    Toast.makeText(this, getString(R.string.device_switched, selected.pcAlias), Toast.LENGTH_SHORT).show()
+                    refreshStatusAndApps()
+                }
+            }
+            .setPositiveButton(R.string.add_device) { _, _ ->
+                startQrScanner()
+            }
+            .setNeutralButton(R.string.btn_remove) { _, _ ->
+                showRemoveDeviceDialog(devices)
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    private fun showRemoveDeviceDialog(devices: List<ConnectionConfig>) {
+        val items = devices.map { "${it.pcAlias} (${it.pcIp})" }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.remove_device)
+            .setItems(items) { _, which ->
+                val toRemove = devices[which]
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.remove_device)
+                    .setMessage(getString(R.string.remove_device_confirm, toRemove.pcAlias))
+                    .setPositiveButton(R.string.btn_remove) { _, _ ->
+                        PulsarPhoneApp.instance.removeDevice(toRemove.id)
+                        Toast.makeText(this, "PC removed", Toast.LENGTH_SHORT).show()
+                        refreshStatusAndApps()
+                    }
+                    .setNegativeButton(R.string.btn_cancel, null)
+                    .show()
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
     }
 
     private fun handleScannedUri(content: String) {
@@ -330,6 +406,17 @@ class MainActivity : AppCompatActivity() {
     private fun refreshStatusAndApps() {
         binding.swipeRefresh.isRefreshing = true
         val cfg = PulsarPhoneApp.instance.getConfig()
+        val devices = PulsarPhoneApp.instance.getSavedDevices()
+
+        if (devices.size > 1) {
+            binding.btnSwitchDevice.text = "PCs (${devices.size})"
+            binding.btnSwitchDevice.visibility = View.VISIBLE
+        } else if (devices.isNotEmpty()) {
+            binding.btnSwitchDevice.text = "PCs"
+            binding.btnSwitchDevice.visibility = View.VISIBLE
+        } else {
+            binding.btnSwitchDevice.visibility = View.GONE
+        }
 
         if (!PulsarPhoneApp.instance.isConfigured()) {
             binding.statusIndicator.backgroundTintList =

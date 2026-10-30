@@ -56,6 +56,13 @@
             android:exported="true"
             android:theme="@style/Theme.PulsarPhone.Fullscreen" />
 
+        <!-- Remote Shell / Terminal Activity -->
+        <activity
+            android:name=".ui.ShellActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Share Sheet Activity (FlyDrop integration) -->
         <activity
             android:name=".ui.ShareActivity"

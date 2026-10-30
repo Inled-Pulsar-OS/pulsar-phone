@@ -81,6 +81,15 @@
                             android:textColor="?attr/colorOnSurface" />
 
                         <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSwitchDevice"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="4dp"
+                            android:text="PCs"
+                            app:icon="@android:drawable/ic_menu_view" />
+
+                        <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnScanQr"
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="wrap_content"
@@ -172,6 +181,16 @@
                             app:icon="@android:drawable/ic_menu_share" />
 
                     </LinearLayout>
+
+                    <!-- Remote Shell / Terminal Action -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOpenTerminal"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/btn_terminal"
+                        app:icon="@android:drawable/ic_menu_agenda" />
 
                 </LinearLayout>
 

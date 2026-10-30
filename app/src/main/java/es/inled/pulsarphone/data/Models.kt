@@ -13,12 +13,22 @@ data class PcApp(
 )
 
 data class ConnectionConfig(
+    val id: String = java.util.UUID.randomUUID().toString(),
     val pcIp: String,
     val pcPort: Int = 8989,
     val token: String,
     val pcAlias: String = "Pulsar PC",
     val flydropPort: Int = 53317,
-    val broadwayPort: Int = 8085
+    val broadwayPort: Int = 8085,
+    val lastUsed: Long = System.currentTimeMillis()
+)
+
+data class ShellResult(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("exit_code") val exitCode: Int,
+    @SerializedName("stdout") val stdout: String,
+    @SerializedName("stderr") val stderr: String,
+    @SerializedName("cwd") val cwd: String? = null
 )
 
 data class FsItem(

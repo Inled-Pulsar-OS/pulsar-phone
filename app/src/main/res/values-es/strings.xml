@@ -88,4 +88,16 @@
     <string name="select_monitor_title">Seleccionar pantalla del PC</string>
     <string name="monitor_primary_badge">%1$s (Principal)</string>
     <string name="monitor_switched">Cambiando a %1$s...</string>
+    <string name="devices_title">Equipos Guardados</string>
+    <string name="add_device">Añadir Nuevo PC</string>
+    <string name="active_badge">%1$s (Activo)</string>
+    <string name="remove_device">Eliminar PC</string>
+    <string name="remove_device_confirm">¿Seguro que deseas eliminar \"%1$s\"?</string>
+    <string name="btn_remove">Eliminar</string>
+    <string name="device_switched">Cambiado a %1$s</string>
+    <string name="btn_terminal">Shell / Terminal</string>
+    <string name="terminal_title">Shell de Pulsar</string>
+    <string name="terminal_hint">Escribe un comando (ej: ls, top, df)...</string>
+    <string name="terminal_clear">Limpiar</string>
+    <string name="terminal_empty">Listo. Ejecuta comandos de shell directamente en tu PC.</string>
 </resources>

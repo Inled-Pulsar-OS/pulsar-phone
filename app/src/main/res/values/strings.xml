@@ -88,4 +88,16 @@
     <string name="select_monitor_title">Select PC Display</string>
     <string name="monitor_primary_badge">%1$s (Primary)</string>
     <string name="monitor_switched">Switching to %1$s...</string>
+    <string name="devices_title">Saved Computers</string>
+    <string name="add_device">Add New Computer</string>
+    <string name="active_badge">%1$s (Active)</string>
+    <string name="remove_device">Remove Computer</string>
+    <string name="remove_device_confirm">Are you sure you want to remove \"%1$s\"?</string>
+    <string name="btn_remove">Remove</string>
+    <string name="device_switched">Switched to %1$s</string>
+    <string name="btn_terminal">Shell / Terminal</string>
+    <string name="terminal_title">Pulsar Shell</string>
+    <string name="terminal_hint">Type command (e.g. ls, top, df)...</string>
+    <string name="terminal_clear">Clear</string>
+    <string name="terminal_empty">Ready. Execute shell commands directly on your PC.</string>
 </resources>
