@@ -120,4 +120,9 @@
     <string name="tools_clipboard_desc">Copy phone text to PC clipboard</string>
     <string name="tools_files_desc">Send photos or documents directly to FlyDrop</string>
     <string name="tools_notifications_desc">Relay phone notifications to Pulsar OS desktop</string>
+    <string name="font_decrease">Smaller font</string>
+    <string name="font_increase">Larger font</string>
+    <string name="font_size">Font size</string>
+    <string name="font_size_toast">Terminal font size: %1$dpx</string>
+    <string name="terminal_reload">Reload</string>
 </resources>

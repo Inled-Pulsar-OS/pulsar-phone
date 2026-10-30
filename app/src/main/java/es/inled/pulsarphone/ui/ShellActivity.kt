@@ -13,8 +13,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import es.inled.pulsarphone.PulsarPhoneApp
 import es.inled.pulsarphone.R
 import es.inled.pulsarphone.databinding.ActivityShellBinding
@@ -25,12 +27,16 @@ class ShellActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityShellBinding
     private var terminalUrl: String? = null
+    private var currentFontSize: Int = 20
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityShellBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        currentFontSize = getSharedPreferences("pulsar_terminal_prefs", Context.MODE_PRIVATE)
+            .getInt("font_size", 20)
 
         val cfg = PulsarPhoneApp.instance.getConfig()
         binding.toolbarShell.subtitle = "${cfg.pcAlias} (${cfg.pcIp})"
@@ -42,6 +48,18 @@ class ShellActivity : AppCompatActivity() {
         binding.toolbarShell.inflateMenu(R.menu.menu_shell)
         binding.toolbarShell.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                R.id.action_font_decrease -> {
+                    changeFontSize(-2)
+                    true
+                }
+                R.id.action_font_increase -> {
+                    changeFontSize(+2)
+                    true
+                }
+                R.id.action_font_size -> {
+                    showFontSizeDialog()
+                    true
+                }
                 R.id.action_reload -> {
                     loadTerminal()
                     true
@@ -82,6 +100,7 @@ class ShellActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 binding.pbTerminalLoading.visibility = View.GONE
                 wv.requestFocus()
+                view?.postDelayed({ applyFontSizeToWebView() }, 300)
             }
 
             override fun onReceivedError(
@@ -168,6 +187,51 @@ class ShellActivity : AppCompatActivity() {
             })();
             """.trimIndent(), null
         )
+    }
+
+    private fun changeFontSize(delta: Int) {
+        val newSize = (currentFontSize + delta).coerceIn(12, 38)
+        setFontSize(newSize)
+    }
+
+    private fun setFontSize(size: Int) {
+        currentFontSize = size
+        getSharedPreferences("pulsar_terminal_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("font_size", currentFontSize)
+            .apply()
+
+        applyFontSizeToWebView()
+        Toast.makeText(this, getString(R.string.font_size_toast, currentFontSize), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun applyFontSizeToWebView() {
+        val js = """
+            (function() {
+                if (window.term) {
+                    window.term.options.fontSize = $currentFontSize;
+                    if (typeof window.term.fit === 'function') {
+                        window.term.fit();
+                    }
+                }
+            })();
+        """.trimIndent()
+        binding.webViewTerminal.evaluateJavascript(js, null)
+    }
+
+    private fun showFontSizeDialog() {
+        val sizes = arrayOf(14, 16, 18, 20, 22, 24, 28, 32)
+        val labels = sizes.map { "${it}px" }.toTypedArray()
+        val checkedItem = sizes.indexOf(currentFontSize).let { if (it >= 0) it else 3 }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.font_size)
+            .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
+                setFontSize(sizes[which])
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun loadTerminal() {

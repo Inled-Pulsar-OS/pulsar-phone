@@ -2,8 +2,22 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
+        android:id="@+id/action_font_decrease"
+        android:title="@string/font_decrease"
+        android:icon="@android:drawable/ic_menu_zoom"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_font_increase"
+        android:title="@string/font_increase"
+        android:icon="@android:drawable/ic_menu_add"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_font_size"
+        android:title="@string/font_size"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_reload"
-        android:title="Reload"
+        android:title="@string/terminal_reload"
         android:icon="@android:drawable/ic_popup_sync"
         app:showAsAction="ifRoom" />
 </menu>
