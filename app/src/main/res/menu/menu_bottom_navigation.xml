@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:id="@+id/nav_apps"
-        android:icon="@drawable/ic_nav_apps"
-        android:title="@string/nav_apps" />
-    <item
         android:id="@+id/nav_tools"
         android:icon="@drawable/ic_nav_tools"
         android:title="@string/nav_tools" />
@@ -12,4 +8,8 @@
         android:id="@+id/nav_devices"
         android:icon="@drawable/ic_nav_devices"
         android:title="@string/nav_devices" />
+    <item
+        android:id="@+id/nav_apps"
+        android:icon="@drawable/ic_nav_apps"
+        android:title="@string/nav_apps" />
 </menu>

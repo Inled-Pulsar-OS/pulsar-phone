@@ -8,6 +8,8 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -63,6 +65,9 @@ class ShellActivity : AppCompatActivity() {
         settings.useWideViewPort = true
         settings.loadWithOverviewMode = true
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
+        settings.allowFileAccess = true
+        settings.allowContentAccess = true
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
         wv.isFocusable = true
         wv.isFocusableInTouchMode = true
@@ -81,13 +86,14 @@ class ShellActivity : AppCompatActivity() {
 
             override fun onReceivedError(
                 view: WebView?,
-                errorCode: Int,
-                description: String?,
-                failingUrl: String?
+                request: WebResourceRequest?,
+                error: WebResourceError?
             ) {
-                binding.pbTerminalLoading.visibility = View.GONE
-                binding.tvTerminalError.visibility = View.VISIBLE
-                binding.tvTerminalError.text = "Error loading terminal: $description\n\nEnsure ttyd is running on PC."
+                if (request?.isForMainFrame == true) {
+                    binding.pbTerminalLoading.visibility = View.GONE
+                    binding.tvTerminalError.visibility = View.VISIBLE
+                    binding.tvTerminalError.text = "Error loading terminal: ${error?.description}\n\nEnsure ttyd is running on PC."
+                }
             }
         }
 

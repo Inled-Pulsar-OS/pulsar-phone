@@ -45,9 +45,9 @@ class MainActivity : AppCompatActivity() {
     private var allApps: List<PcApp> = emptyList()
 
     companion object {
-        const val TAB_APPS = 0
-        const val TAB_TOOLS = 1
-        const val TAB_DEVICES = 2
+        const val TAB_TOOLS = 0
+        const val TAB_DEVICES = 1
+        const val TAB_APPS = 2
     }
 
     // Camera QR Code Scanner Launcher
@@ -113,12 +113,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupNavigation() {
+        binding.bottomNavigation.selectedItemId = R.id.nav_tools
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
-                R.id.nav_apps -> {
-                    showTab(TAB_APPS)
-                    true
-                }
                 R.id.nav_tools -> {
                     showTab(TAB_TOOLS)
                     true
@@ -126,6 +123,10 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_devices -> {
                     showTab(TAB_DEVICES)
                     refreshDevicesTab()
+                    true
+                }
+                R.id.nav_apps -> {
+                    showTab(TAB_APPS)
                     true
                 }
                 else -> false

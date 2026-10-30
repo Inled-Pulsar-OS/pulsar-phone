@@ -30,29 +30,18 @@
         android:layout_marginBottom="80dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Tab 1: Apps -->
-        <FrameLayout
-            android:id="@+id/tabAppsContainer"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="visible">
-            <include
-                android:id="@+id/tabApps"
-                layout="@layout/view_tab_apps" />
-        </FrameLayout>
-
-        <!-- Tab 2: Tools & Options -->
+        <!-- Tab 1: Tools & Options (First) -->
         <FrameLayout
             android:id="@+id/tabToolsContainer"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone">
+            android:visibility="visible">
             <include
                 android:id="@+id/tabTools"
                 layout="@layout/view_tab_tools" />
         </FrameLayout>
 
-        <!-- Tab 3: Devices & QR Scanner -->
+        <!-- Tab 2: Devices & QR Scanner (Middle) -->
         <FrameLayout
             android:id="@+id/tabDevicesContainer"
             android:layout_width="match_parent"
@@ -61,6 +50,17 @@
             <include
                 android:id="@+id/tabDevices"
                 layout="@layout/view_tab_devices" />
+        </FrameLayout>
+
+        <!-- Tab 3: Apps (Last) -->
+        <FrameLayout
+            android:id="@+id/tabAppsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+            <include
+                android:id="@+id/tabApps"
+                layout="@layout/view_tab_apps" />
         </FrameLayout>
 
     </FrameLayout>
