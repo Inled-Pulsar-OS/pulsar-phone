@@ -197,6 +197,23 @@ object PulsarApiClient {
         }
     }
 
+    suspend fun isPhoneToPcStreaming(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("${getBaseUrl()}/api/stream/phone-to-pc/status")
+                .header("X-Pulsar-Token", getToken())
+                .get()
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext false
+                val body = resp.body?.string().orEmpty()
+                org.json.JSONObject(body).optBoolean("running", false)
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     suspend fun getApps(): Result<List<PcApp>> = withContext(Dispatchers.IO) {
         try {
             val req = Request.Builder()

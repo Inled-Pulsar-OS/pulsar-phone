@@ -100,4 +100,16 @@
     <string name="terminal_hint">Type command (e.g. ls, top, df)...</string>
     <string name="terminal_clear">Clear</string>
     <string name="terminal_empty">Ready. Execute shell commands directly on your PC.</string>
+    <string name="nav_apps">Apps</string>
+    <string name="nav_tools">Tools</string>
+    <string name="nav_devices">Devices</string>
+    <string name="active_pc_card_title">Active PC</string>
+    <string name="tools_streaming_header">Screen &amp; Audio</string>
+    <string name="tools_system_header">System &amp; Console</string>
+    <string name="tools_sync_header">Sync &amp; Transfer</string>
+    <string name="pair_manual_title">Manual Connection</string>
+    <string name="hint_pc_ip">PC IP address (e.g. 100.x.y.z or 192.168.x.x)</string>
+    <string name="hint_pc_alias">PC Name / Alias (e.g. My Laptop)</string>
+    <string name="hint_token">Authentication Token</string>
+    <string name="btn_connect_device">Connect</string>
 </resources>

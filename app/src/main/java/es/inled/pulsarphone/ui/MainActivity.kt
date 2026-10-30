@@ -12,6 +12,7 @@ import android.net.VpnService
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.provider.Settings
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,23 +29,25 @@ import es.inled.pulsarphone.R
 import es.inled.pulsarphone.data.ConnectionConfig
 import es.inled.pulsarphone.data.PcApp
 import es.inled.pulsarphone.databinding.ActivityMainBinding
+import es.inled.pulsarphone.databinding.ItemSavedDeviceBinding
 import es.inled.pulsarphone.net.FlydropClient
 import es.inled.pulsarphone.net.PulsarApiClient
 import es.inled.pulsarphone.net.PulsarVpnManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: AppAdapter
     private var allApps: List<PcApp> = emptyList()
+
+    companion object {
+        const val TAB_APPS = 0
+        const val TAB_TOOLS = 1
+        const val TAB_DEVICES = 2
+    }
 
     // Camera QR Code Scanner Launcher
     private val qrScannerLauncher = registerForActivityResult(ScanContract()) { result ->
@@ -78,6 +81,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        setupNavigation()
         setupRecyclerView()
         setupListeners()
         setupVpnMonitor()
@@ -85,6 +89,7 @@ class MainActivity : AppCompatActivity() {
         handleDeepLink(intent)
         refreshStatusAndApps()
         updateVpnButtonState()
+        refreshDevicesTab()
     }
 
     override fun onResume() {
@@ -92,6 +97,7 @@ class MainActivity : AppCompatActivity() {
         updateVpnButtonState()
         updateNotificationSyncButton()
         checkPhoneCastStatus()
+        refreshDevicesTab()
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -99,41 +105,72 @@ class MainActivity : AppCompatActivity() {
         intent?.let { handleDeepLink(it) }
     }
 
+    private fun setupNavigation() {
+        binding.bottomNavigation.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_apps -> {
+                    showTab(TAB_APPS)
+                    true
+                }
+                R.id.nav_tools -> {
+                    showTab(TAB_TOOLS)
+                    true
+                }
+                R.id.nav_devices -> {
+                    showTab(TAB_DEVICES)
+                    refreshDevicesTab()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun showTab(tab: Int) {
+        binding.tabAppsContainer.visibility = if (tab == TAB_APPS) View.VISIBLE else View.GONE
+        binding.tabToolsContainer.visibility = if (tab == TAB_TOOLS) View.VISIBLE else View.GONE
+        binding.tabDevicesContainer.visibility = if (tab == TAB_DEVICES) View.VISIBLE else View.GONE
+    }
+
     private fun setupRecyclerView() {
         adapter = AppAdapter { app ->
             launchPcApp(app)
         }
-        binding.appsRecyclerView.layoutManager = GridLayoutManager(this, 3)
-        binding.appsRecyclerView.adapter = adapter
+        binding.tabApps.appsRecyclerView.layoutManager = GridLayoutManager(this, 3)
+        binding.tabApps.appsRecyclerView.adapter = adapter
     }
 
     private fun setupListeners() {
-        binding.swipeRefresh.setOnRefreshListener {
+        // --- TAB 1: APPS LISTENERS ---
+        binding.tabApps.swipeRefresh.setOnRefreshListener {
             refreshStatusAndApps()
         }
 
-        binding.btnScanQr.setOnClickListener {
-            startQrScanner()
+        binding.tabApps.searchAppsInput.doAfterTextChanged { text ->
+            val query = text?.toString().orEmpty()
+            binding.tabApps.btnClearSearch.visibility = if (query.isNotBlank()) View.VISIBLE else View.GONE
+            filterApps(query)
         }
 
-        binding.btnToggleVpn.setOnClickListener {
+        binding.tabApps.btnClearSearch.setOnClickListener {
+            binding.tabApps.searchAppsInput.text?.clear()
+        }
+
+        // --- TAB 2: TOOLS LISTENERS ---
+        binding.tabTools.btnToggleVpn.setOnClickListener {
             toggleVpn()
         }
 
-        binding.btnClipboardSync.setOnClickListener {
-            syncPhoneClipboardToPc()
-        }
-
-        binding.btnMountFiles.setOnClickListener {
-            filePickerLauncher.launch(arrayOf("*/*"))
-        }
-
-        binding.btnWatchPcScreen.setOnClickListener {
+        binding.tabTools.cardWatchPc.setOnClickListener {
             val intent = Intent(this, DesktopStreamActivity::class.java)
             startActivity(intent)
         }
 
-        binding.btnOpenTerminal.setOnClickListener {
+        binding.tabTools.cardCastPhone.setOnClickListener {
+            togglePhoneCastToPc()
+        }
+
+        binding.tabTools.cardRemoteShell.setOnClickListener {
             if (!PulsarPhoneApp.instance.isConfigured()) {
                 Toast.makeText(this, getString(R.string.pc_not_paired), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -141,26 +178,43 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ShellActivity::class.java))
         }
 
-        binding.btnSwitchDevice.setOnClickListener {
-            showDeviceSwitcherDialog()
+        binding.tabTools.cardClipboardSync.setOnClickListener {
+            syncPhoneClipboardToPc()
         }
 
-        binding.pcInfoText.setOnClickListener {
-            showDeviceSwitcherDialog()
+        binding.tabTools.cardSendFiles.setOnClickListener {
+            filePickerLauncher.launch(arrayOf("*/*"))
         }
 
-        binding.btnCastPhoneToPc.setOnClickListener {
-            togglePhoneCastToPc()
+        // --- TAB 3: DEVICES LISTENERS ---
+        binding.tabDevices.cardScanQrDevices.setOnClickListener {
+            startQrScanner()
         }
 
-        binding.searchAppsInput.doAfterTextChanged { text ->
-            val query = text?.toString().orEmpty()
-            binding.btnClearSearch.visibility = if (query.isNotBlank()) View.VISIBLE else View.GONE
-            filterApps(query)
-        }
+        binding.tabDevices.btnManualConnect.setOnClickListener {
+            val alias = binding.tabDevices.etManualAlias.text.toString().trim().ifEmpty { "Pulsar PC" }
+            val ip = binding.tabDevices.etManualIp.text.toString().trim()
+            val token = binding.tabDevices.etManualToken.text.toString().trim()
 
-        binding.btnClearSearch.setOnClickListener {
-            binding.searchAppsInput.text?.clear()
+            if (ip.isEmpty() || token.isEmpty()) {
+                Toast.makeText(this, "Introduce la IP y el Token del PC", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val cfg = ConnectionConfig(
+                pcIp = ip,
+                pcPort = 8989,
+                token = token,
+                pcAlias = alias
+            )
+            PulsarPhoneApp.instance.saveDevice(cfg, setActive = true)
+            binding.tabDevices.etManualIp.text?.clear()
+            binding.tabDevices.etManualToken.text?.clear()
+            binding.tabDevices.etManualAlias.text?.clear()
+
+            Toast.makeText(this, getString(R.string.pc_paired_success, alias), Toast.LENGTH_SHORT).show()
+            refreshStatusAndApps()
+            refreshDevicesTab()
         }
 
         updateNotificationSyncButton()
@@ -173,10 +227,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateNotificationSyncButton() {
         val granted = isNotificationAccessGranted()
-        binding.btnNotificationSync.text = getString(R.string.btn_notifications)
         if (granted) {
-            binding.btnNotificationSync.setIconResource(android.R.drawable.ic_dialog_info)
-            binding.btnNotificationSync.setOnClickListener {
+            binding.tabTools.ivNotificationIcon.setImageResource(android.R.drawable.ic_dialog_info)
+            binding.tabTools.tvNotificationTitle.text = getString(R.string.btn_notifications) + " (Activo)"
+            binding.tabTools.tvNotificationSubtitle.text = "Toca para enviar una notificación de prueba al PC"
+            binding.tabTools.cardNotificationSync.setOnClickListener {
                 lifecycleScope.launch {
                     val res = PulsarApiClient.sendNotification(
                         es.inled.pulsarphone.data.NotificationPayload(
@@ -194,8 +249,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } else {
-            binding.btnNotificationSync.setIconResource(android.R.drawable.ic_lock_idle_alarm)
-            binding.btnNotificationSync.setOnClickListener {
+            binding.tabTools.ivNotificationIcon.setImageResource(android.R.drawable.ic_lock_idle_alarm)
+            binding.tabTools.tvNotificationTitle.text = getString(R.string.btn_notifications) + " (Desactivado)"
+            binding.tabTools.tvNotificationSubtitle.text = "Toca para conceder permisos y reenviar avisos al PC"
+            binding.tabTools.cardNotificationSync.setOnClickListener {
                 startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                 Toast.makeText(this, getString(R.string.grant_notification_permission), Toast.LENGTH_LONG).show()
             }
@@ -212,64 +269,65 @@ class MainActivity : AppCompatActivity() {
         qrScannerLauncher.launch(options)
     }
 
-    private fun showDeviceSwitcherDialog() {
+    private fun refreshDevicesTab() {
+        val cfg = PulsarPhoneApp.instance.getConfig()
         val devices = PulsarPhoneApp.instance.getSavedDevices()
         val activeId = PulsarPhoneApp.instance.getActiveDeviceId()
 
+        binding.tabDevices.tvActivePcName.text = cfg.pcAlias
+        binding.tabDevices.tvActivePcDetails.text = "IP: ${cfg.pcIp} • Puerto: ${cfg.pcPort}"
+
+        binding.tabDevices.containerSavedDevices.removeAllViews()
+
         if (devices.isEmpty()) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.devices_title)
-                .setMessage(R.string.scan_qr_prompt)
-                .setPositiveButton(R.string.btn_scan_qr) { _, _ -> startQrScanner() }
-                .setNegativeButton(R.string.btn_cancel, null)
-                .show()
+            val emptyTv = android.widget.TextView(this).apply {
+                text = getString(R.string.scan_qr_prompt)
+                setTextColor(ContextCompat.getColor(this@MainActivity, android.R.color.darker_gray))
+                setPadding(16, 24, 16, 24)
+            }
+            binding.tabDevices.containerSavedDevices.addView(emptyTv)
             return
         }
 
-        val items = devices.map { d ->
-            val activeStr = if (d.id == activeId) " ★" else ""
-            "${d.pcAlias} (${d.pcIp})$activeStr"
-        }.toTypedArray()
+        val inflater = LayoutInflater.from(this)
+        for (dev in devices) {
+            val itemBinding = ItemSavedDeviceBinding.inflate(inflater, binding.tabDevices.containerSavedDevices, false)
+            itemBinding.tvDeviceAlias.text = dev.pcAlias
+            itemBinding.tvDeviceIp.text = "${dev.pcIp}:${dev.pcPort}"
 
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.devices_title)
-            .setItems(items) { _, which ->
-                val selected = devices[which]
-                if (selected.id != activeId) {
-                    PulsarPhoneApp.instance.setActiveDevice(selected.id)
-                    Toast.makeText(this, getString(R.string.device_switched, selected.pcAlias), Toast.LENGTH_SHORT).show()
+            val isActive = dev.id == activeId || (activeId == null && dev == devices.first())
+            if (isActive) {
+                itemBinding.btnConnectThisDevice.text = "ACTIVO"
+                itemBinding.btnConnectThisDevice.isEnabled = false
+                itemBinding.btnConnectThisDevice.setIconResource(android.R.drawable.checkbox_on_background)
+            } else {
+                itemBinding.btnConnectThisDevice.text = getString(R.string.btn_connect_device)
+                itemBinding.btnConnectThisDevice.isEnabled = true
+                itemBinding.btnConnectThisDevice.icon = null
+                itemBinding.btnConnectThisDevice.setOnClickListener {
+                    PulsarPhoneApp.instance.setActiveDevice(dev.id)
+                    Toast.makeText(this, getString(R.string.device_switched, dev.pcAlias), Toast.LENGTH_SHORT).show()
                     refreshStatusAndApps()
+                    refreshDevicesTab()
                 }
             }
-            .setPositiveButton(R.string.add_device) { _, _ ->
-                startQrScanner()
-            }
-            .setNeutralButton(R.string.btn_remove) { _, _ ->
-                showRemoveDeviceDialog(devices)
-            }
-            .setNegativeButton(R.string.btn_cancel, null)
-            .show()
-    }
 
-    private fun showRemoveDeviceDialog(devices: List<ConnectionConfig>) {
-        val items = devices.map { "${it.pcAlias} (${it.pcIp})" }.toTypedArray()
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.remove_device)
-            .setItems(items) { _, which ->
-                val toRemove = devices[which]
+            itemBinding.btnDeleteDevice.setOnClickListener {
                 MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.remove_device)
-                    .setMessage(getString(R.string.remove_device_confirm, toRemove.pcAlias))
+                    .setMessage(getString(R.string.remove_device_confirm, dev.pcAlias))
                     .setPositiveButton(R.string.btn_remove) { _, _ ->
-                        PulsarPhoneApp.instance.removeDevice(toRemove.id)
-                        Toast.makeText(this, "PC removed", Toast.LENGTH_SHORT).show()
+                        PulsarPhoneApp.instance.removeDevice(dev.id)
+                        Toast.makeText(this, "PC eliminado", Toast.LENGTH_SHORT).show()
                         refreshStatusAndApps()
+                        refreshDevicesTab()
                     }
                     .setNegativeButton(R.string.btn_cancel, null)
                     .show()
             }
-            .setNegativeButton(R.string.btn_cancel, null)
-            .show()
+
+            binding.tabDevices.containerSavedDevices.addView(itemBinding.root)
+        }
     }
 
     private fun handleScannedUri(content: String) {
@@ -290,6 +348,7 @@ class MainActivity : AppCompatActivity() {
                 PulsarPhoneApp.instance.saveConfig(cfg)
                 Toast.makeText(this, getString(R.string.pc_paired_success, alias), Toast.LENGTH_LONG).show()
                 refreshStatusAndApps()
+                refreshDevicesTab()
                 return
             }
         }
@@ -325,15 +384,12 @@ class MainActivity : AppCompatActivity() {
                     runOnUiThread { updateVpnButtonState() }
                 }
             })
-        } catch (e: Exception) {
-            // fallback handled by onResume
-        }
+        } catch (e: Exception) {}
     }
 
     private fun toggleVpn() {
         val isRealVpn = isRealVpnActive() || PulsarVpnManager.isVpnRunning()
         if (isRealVpn) {
-            // If internal WireGuard tunnel is active, stop it
             if (PulsarVpnManager.isVpnRunning()) {
                 lifecycleScope.launch {
                     PulsarVpnManager.stopTunnel()
@@ -341,7 +397,6 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, getString(R.string.vpn_disconnected_toast), Toast.LENGTH_SHORT).show()
                 }
             } else {
-                // If system Tailscale VPN is active, open Tailscale to toggle
                 val tsIntent = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
                 if (tsIntent != null) {
                     startActivity(tsIntent)
@@ -354,12 +409,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } else {
-            // Not connected: open Tailscale for 1-click connect/login if installed
             val tsIntent = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
             if (tsIntent != null) {
                 startActivity(tsIntent)
             } else {
-                // Otherwise start internal WireGuard service
                 val vpnIntent = VpnService.prepare(this)
                 if (vpnIntent != null) {
                     vpnPermissionLauncher.launch(vpnIntent)
@@ -397,67 +450,65 @@ class MainActivity : AppCompatActivity() {
     private fun updateVpnButtonState() {
         val isRealVpn = isRealVpnActive() || PulsarVpnManager.isVpnRunning()
         if (isRealVpn) {
-            binding.btnToggleVpn.text = getString(R.string.vpn_status_active)
+            binding.tabTools.btnToggleVpn.text = getString(R.string.vpn_status_active)
         } else {
-            binding.btnToggleVpn.text = getString(R.string.vpn_status_inactive)
+            binding.tabTools.btnToggleVpn.text = getString(R.string.vpn_status_inactive)
         }
     }
 
     private fun refreshStatusAndApps() {
-        binding.swipeRefresh.isRefreshing = true
+        binding.tabApps.swipeRefresh.isRefreshing = true
         val cfg = PulsarPhoneApp.instance.getConfig()
-        val devices = PulsarPhoneApp.instance.getSavedDevices()
 
-        if (devices.size > 1) {
-            binding.btnSwitchDevice.text = "PCs (${devices.size})"
-            binding.btnSwitchDevice.visibility = View.VISIBLE
-        } else if (devices.isNotEmpty()) {
-            binding.btnSwitchDevice.text = "PCs"
-            binding.btnSwitchDevice.visibility = View.VISIBLE
-        } else {
-            binding.btnSwitchDevice.visibility = View.GONE
-        }
+        binding.topAppBar.subtitle = "${cfg.pcAlias} (${cfg.pcIp})"
 
         if (!PulsarPhoneApp.instance.isConfigured()) {
-            binding.statusIndicator.backgroundTintList =
+            binding.tabTools.toolsStatusIndicator.backgroundTintList =
                 ContextCompat.getColorStateList(this, R.color.status_disconnected)
-            binding.statusText.text = getString(R.string.vpn_disconnected)
-            binding.pcInfoText.text = getString(R.string.scan_qr_to_pair)
-            binding.emptyAppsText.visibility = View.VISIBLE
-            binding.emptyAppsText.text = getString(R.string.scan_qr_to_see_apps)
-            binding.appsCount.text = getString(R.string.apps_count_format, 0)
+            binding.tabDevices.activePcStatusDot.backgroundTintList =
+                ContextCompat.getColorStateList(this, R.color.status_disconnected)
+            binding.tabTools.toolsStatusTitle.text = getString(R.string.vpn_disconnected)
+            binding.tabTools.toolsStatusSubtitle.text = getString(R.string.scan_qr_to_pair)
+
+            binding.tabApps.emptyAppsText.visibility = View.VISIBLE
+            binding.tabApps.emptyAppsText.text = getString(R.string.scan_qr_to_see_apps)
+            binding.tabApps.appsCount.text = getString(R.string.apps_count_format, 0)
             adapter.setApps(emptyList())
-            binding.swipeRefresh.isRefreshing = false
+            binding.tabApps.swipeRefresh.isRefreshing = false
             return
         }
 
         lifecycleScope.launch {
             val isOnline = PulsarApiClient.ping()
             if (isOnline) {
-                binding.statusIndicator.backgroundTintList =
+                binding.tabTools.toolsStatusIndicator.backgroundTintList =
                     ContextCompat.getColorStateList(this@MainActivity, R.color.status_connected)
-                binding.statusText.text = getString(R.string.pc_connected_status, cfg.pcAlias)
-                binding.pcInfoText.text = getString(R.string.secure_tunnel_active, cfg.pcIp)
+                binding.tabDevices.activePcStatusDot.backgroundTintList =
+                    ContextCompat.getColorStateList(this@MainActivity, R.color.status_connected)
+                binding.tabTools.toolsStatusTitle.text = getString(R.string.pc_connected_status, cfg.pcAlias)
+                binding.tabTools.toolsStatusSubtitle.text = getString(R.string.secure_tunnel_active, cfg.pcIp)
 
                 val appsResult = PulsarApiClient.getApps()
-                binding.swipeRefresh.isRefreshing = false
+                binding.tabApps.swipeRefresh.isRefreshing = false
 
                 if (appsResult.isSuccess) {
                     allApps = appsResult.getOrDefault(emptyList())
-                    val currentQuery = binding.searchAppsInput.text?.toString().orEmpty()
+                    val currentQuery = binding.tabApps.searchAppsInput.text?.toString().orEmpty()
                     filterApps(currentQuery)
                 } else {
                     allApps = emptyList()
                     filterApps("")
-                    binding.emptyAppsText.visibility = View.VISIBLE
-                    binding.emptyAppsText.text = getString(R.string.error_fetching_apps)
+                    binding.tabApps.emptyAppsText.visibility = View.VISIBLE
+                    binding.tabApps.emptyAppsText.text = getString(R.string.error_fetching_apps)
                 }
             } else {
-                binding.statusIndicator.backgroundTintList =
+                binding.tabTools.toolsStatusIndicator.backgroundTintList =
                     ContextCompat.getColorStateList(this@MainActivity, R.color.status_disconnected)
-                binding.statusText.text = getString(R.string.pc_unresponsive_status, cfg.pcAlias)
-                binding.pcInfoText.text = getString(R.string.check_pulsar_vpn_open, cfg.pcIp)
-                binding.swipeRefresh.isRefreshing = false
+                binding.tabDevices.activePcStatusDot.backgroundTintList =
+                    ContextCompat.getColorStateList(this@MainActivity, R.color.status_disconnected)
+                binding.tabTools.toolsStatusTitle.text = getString(R.string.pc_unresponsive_status, cfg.pcAlias)
+                binding.tabTools.toolsStatusSubtitle.text = getString(R.string.check_pulsar_vpn_open, cfg.pcIp)
+                binding.tabApps.swipeRefresh.isRefreshing = false
                 allApps = emptyList()
                 filterApps("")
             }
@@ -466,61 +517,102 @@ class MainActivity : AppCompatActivity() {
 
     private fun filterApps(query: String) {
         val trimmed = query.trim()
-        val filtered = if (trimmed.isBlank()) {
+        val filtered = if (trimmed.isEmpty()) {
             allApps
         } else {
-            allApps.filter {
-                it.name.contains(trimmed, ignoreCase = true) ||
-                (it.comment ?: "").contains(trimmed, ignoreCase = true)
+            allApps.filter { app ->
+                app.name.contains(trimmed, ignoreCase = true) ||
+                app.categories.any { it.contains(trimmed, ignoreCase = true) }
             }
         }
+
         adapter.setApps(filtered)
-        binding.appsCount.text = getString(R.string.apps_count_format, filtered.size)
-        binding.emptyAppsText.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
+        binding.tabApps.appsCount.text = getString(R.string.apps_count_format, filtered.size)
+
         if (filtered.isEmpty() && allApps.isNotEmpty()) {
-            binding.emptyAppsText.text = getString(R.string.no_apps_found_for, trimmed)
+            binding.tabApps.emptyAppsText.visibility = View.VISIBLE
+            binding.tabApps.emptyAppsText.text = getString(R.string.no_apps_found_for, trimmed)
         } else if (allApps.isEmpty()) {
-            binding.emptyAppsText.text = getString(R.string.apps_empty)
+            binding.tabApps.emptyAppsText.visibility = View.VISIBLE
+            binding.tabApps.emptyAppsText.text = getString(R.string.scan_qr_to_see_apps)
+        } else {
+            binding.tabApps.emptyAppsText.visibility = View.GONE
         }
     }
 
     private fun launchPcApp(app: PcApp) {
-        val isDarkMode = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
-        Toast.makeText(this, getString(R.string.opening_app, app.name), Toast.LENGTH_SHORT).show()
+        val cfg = PulsarPhoneApp.instance.getConfig()
+        val broadwayUrl = "http://${cfg.pcIp}:${cfg.broadwayPort}"
+
         lifecycleScope.launch {
-            val res = PulsarApiClient.launchApp(app.id, darkMode = isDarkMode)
+            val res = PulsarApiClient.launchApp(app.id)
             if (res.isSuccess) {
-                val broadwayUrl = res.getOrNull()
                 val intent = Intent(this@MainActivity, BroadwayActivity::class.java).apply {
-                    putExtra(BroadwayActivity.EXTRA_APP_NAME, app.name)
-                    putExtra(BroadwayActivity.EXTRA_BROADWAY_URL, broadwayUrl)
+                    putExtra("APP_URL", broadwayUrl)
+                    putExtra("APP_NAME", app.name)
                 }
                 startActivity(intent)
             } else {
-                Toast.makeText(this@MainActivity, getString(R.string.error_launching_app, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.error_launching_app, res.exceptionOrNull()?.message ?: ""),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
 
     private fun syncPhoneClipboardToPc() {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clipData = clipboard.primaryClip
-        if (clipData != null && clipData.itemCount > 0) {
-            val text = clipData.getItemAt(0).text?.toString() ?: ""
-            if (text.isNotBlank()) {
-                lifecycleScope.launch {
-                    val res = PulsarApiClient.syncClipboardToPc(text)
-                    if (res.isSuccess) {
-                        Toast.makeText(this@MainActivity, getString(R.string.clipboard_sent_to_pc), Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this@MainActivity, getString(R.string.clipboard_sync_error), Toast.LENGTH_SHORT).show()
-                    }
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = cm?.primaryClip
+        val text = if (clip != null && clip.itemCount > 0) {
+            clip.getItemAt(0).text?.toString()
+        } else null
+
+        if (text.isNullOrBlank()) {
+            Toast.makeText(this, getString(R.string.clipboard_empty), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            val res = PulsarApiClient.syncClipboardToPc(text)
+            if (res.isSuccess) {
+                Toast.makeText(this@MainActivity, getString(R.string.clipboard_sent_to_pc), Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this@MainActivity, getString(R.string.clipboard_sync_error), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun togglePhoneCastToPc() {
+        lifecycleScope.launch {
+            val isStreaming = PulsarApiClient.isPhoneToPcStreaming()
+            if (isStreaming) {
+                val res = PulsarApiClient.stopPhoneCastToPc()
+                if (res.isSuccess) {
+                    Toast.makeText(this@MainActivity, getString(R.string.phone_cast_stopped), Toast.LENGTH_SHORT).show()
+                    binding.tabTools.tvCastPhoneTitle.text = getString(R.string.btn_cast_to_pc)
                 }
             } else {
-                Toast.makeText(this, getString(R.string.clipboard_empty), Toast.LENGTH_SHORT).show()
+                val res = PulsarApiClient.startPhoneCastToPc(fullscreen = false)
+                if (res.isSuccess) {
+                    Toast.makeText(this@MainActivity, getString(R.string.phone_cast_started), Toast.LENGTH_SHORT).show()
+                    binding.tabTools.tvCastPhoneTitle.text = getString(R.string.btn_stop_cast)
+                } else {
+                    Toast.makeText(this@MainActivity, "Error: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                }
             }
-        } else {
-            Toast.makeText(this, getString(R.string.clipboard_empty), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun checkPhoneCastStatus() {
+        lifecycleScope.launch {
+            val isStreaming = PulsarApiClient.isPhoneToPcStreaming()
+            if (isStreaming) {
+                binding.tabTools.tvCastPhoneTitle.text = getString(R.string.btn_stop_cast)
+            } else {
+                binding.tabTools.tvCastPhoneTitle.text = getString(R.string.btn_cast_to_pc)
+            }
         }
     }
 
@@ -570,81 +662,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var isPhoneCastActive = false
-
-    private fun checkPhoneCastStatus() {
-        val cfg = PulsarPhoneApp.instance.getConfig()
-        lifecycleScope.launch {
-            try {
-                val running = withContext(Dispatchers.IO) {
-                    val client = OkHttpClient.Builder().connectTimeout(2, TimeUnit.SECONDS).build()
-                    val req = Request.Builder()
-                        .url("http://${cfg.pcIp}:${cfg.pcPort}/api/stream/phone-to-pc/status")
-                        .addHeader("X-Pulsar-Token", cfg.token)
-                        .get()
-                        .build()
-                    val resp = client.newCall(req).execute()
-                    val body = resp.body?.string().orEmpty()
-                    resp.close()
-                    org.json.JSONObject(body).optBoolean("running", false)
-                }
-                isPhoneCastActive = running
-                updateCastButtonUI()
-            } catch (e: Exception) {
-                // Ignore status check errors
+    private fun getFileName(uri: Uri): String {
+        var name = "file"
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (idx >= 0 && cursor.moveToFirst()) {
+                name = cursor.getString(idx)
             }
         }
-    }
-
-    private fun updateCastButtonUI() {
-        if (isPhoneCastActive) {
-            binding.btnCastPhoneToPc.text = getString(R.string.btn_stop_cast)
-            binding.btnCastPhoneToPc.setIconResource(android.R.drawable.ic_media_pause)
-        } else {
-            binding.btnCastPhoneToPc.text = getString(R.string.btn_cast_to_pc)
-            binding.btnCastPhoneToPc.setIconResource(android.R.drawable.ic_menu_share)
-        }
-    }
-
-    private fun togglePhoneCastToPc() {
-        if (isPhoneCastActive) {
-            lifecycleScope.launch {
-                val res = PulsarApiClient.stopPhoneCastToPc()
-                if (res.isSuccess) {
-                    isPhoneCastActive = false
-                    updateCastButtonUI()
-                    Toast.makeText(this@MainActivity, getString(R.string.phone_cast_stopped), Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this@MainActivity, getString(R.string.error_sending, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_SHORT).show()
-                }
-            }
-            return
-        }
-
-        val options = arrayOf(
-            getString(R.string.cast_mode_fullscreen),
-            getString(R.string.cast_mode_windowed)
-        )
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.cast_mode_dialog_title)
-            .setItems(options) { _, which ->
-                val isFullscreen = (which == 0)
-                startPhoneCast(isFullscreen)
-            }
-            .setNegativeButton(R.string.btn_cancel, null)
-            .show()
-    }
-
-    private fun startPhoneCast(fullscreen: Boolean) {
-        lifecycleScope.launch {
-            val res = PulsarApiClient.startPhoneCastToPc(fullscreen = fullscreen)
-            if (res.isSuccess) {
-                isPhoneCastActive = true
-                updateCastButtonUI()
-                Toast.makeText(this@MainActivity, getString(R.string.phone_cast_started), Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this@MainActivity, getString(R.string.error_sending, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_SHORT).show()
-            }
-        }
+        return name
     }
 }
