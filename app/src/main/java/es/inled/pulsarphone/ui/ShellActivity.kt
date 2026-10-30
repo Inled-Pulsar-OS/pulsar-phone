@@ -28,6 +28,8 @@ class ShellActivity : AppCompatActivity() {
     private lateinit var binding: ActivityShellBinding
     private var terminalUrl: String? = null
     private var currentFontSize: Int = 20
+    private var isCtrlLatched: Boolean = false
+    private var isAltLatched: Boolean = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,6 +124,53 @@ class ShellActivity : AppCompatActivity() {
     private fun setupAccessoryKeys() {
         val wv = binding.webViewTerminal
 
+        // Toggle Expandable Modifiers Toolbar
+        binding.btnToggleModifiers.setOnClickListener {
+            val isVisible = binding.scrollModifiersBar.visibility == View.VISIBLE
+            binding.scrollModifiersBar.visibility = if (isVisible) View.GONE else View.VISIBLE
+            binding.btnToggleModifiers.text = if (isVisible) "MOD ▾" else "MOD ▴"
+        }
+
+        // Latch Modifiers
+        binding.btnModCtrl.isCheckable = true
+        binding.btnModCtrl.addOnCheckedChangeListener { _, isChecked ->
+            isCtrlLatched = isChecked
+        }
+
+        binding.btnModAlt.isCheckable = true
+        binding.btnModAlt.addOnCheckedChangeListener { _, isChecked ->
+            isAltLatched = isChecked
+        }
+
+        binding.btnModWin.setOnClickListener {
+            sendAnsiSequence("\\u001b")
+            Toast.makeText(this, "Win/Meta", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnModFn.setOnClickListener {
+            showFunctionKeysDialog()
+        }
+
+        // Common Combinations
+        binding.btnModCtrlZ.setOnClickListener { sendAnsiSequence("\\x1a") }
+        binding.btnModCtrlD.setOnClickListener { sendAnsiSequence("\\x04") }
+        binding.btnModCtrlL.setOnClickListener { sendAnsiSequence("\\x0c") }
+        binding.btnModCtrlA.setOnClickListener { sendAnsiSequence("\\x01") }
+        binding.btnModCtrlE.setOnClickListener { sendAnsiSequence("\\x05") }
+
+        // Symbols
+        binding.btnModPipe.setOnClickListener { sendTextToTerminal("|") }
+        binding.btnModTilde.setOnClickListener { sendTextToTerminal("~") }
+        binding.btnModSlash.setOnClickListener { sendTextToTerminal("/") }
+        binding.btnModBackslash.setOnClickListener { sendTextToTerminal("\\") }
+
+        // Home / End / Page Navigation
+        binding.btnModHome.setOnClickListener { sendAnsiSequence("\\u001b[H") }
+        binding.btnModEnd.setOnClickListener { sendAnsiSequence("\\u001b[F") }
+        binding.btnModPgUp.setOnClickListener { sendAnsiSequence("\\u001b[5~") }
+        binding.btnModPgDn.setOnClickListener { sendAnsiSequence("\\u001b[6~") }
+
+        // Primary Row Keys
         binding.btnKeyEsc.setOnClickListener {
             sendKeyToTerminal(KeyEvent.KEYCODE_ESCAPE, "\\u001b")
         }
@@ -131,19 +180,7 @@ class ShellActivity : AppCompatActivity() {
         }
 
         binding.btnKeyCtrlC.setOnClickListener {
-            // Sends SIGINT (0x03 / Ctrl+C) to active shell process in xterm
-            wv.evaluateJavascript(
-                """
-                (function() {
-                    if (window.term) {
-                        window.term.write('\x03');
-                    } else {
-                        var e = new KeyboardEvent('keydown', {key: 'c', ctrlKey: true, keyCode: 67});
-                        document.dispatchEvent(e);
-                    }
-                })();
-                """.trimIndent(), null
-            )
+            sendAnsiSequence("\\x03")
         }
 
         binding.btnKeyUp.setOnClickListener {
@@ -167,6 +204,75 @@ class ShellActivity : AppCompatActivity() {
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             imm?.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
         }
+
+        // Intercept keys from soft/hard keyboard when Ctrl or Alt is latched
+        wv.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                if (isCtrlLatched) {
+                    val unicode = event.unicodeChar
+                    if ((unicode in 97..122) || (unicode in 65..90)) {
+                        val ctrlCode = Character.toUpperCase(unicode.toChar()) - '@'
+                        sendAnsiSequence("\\x${Integer.toHexString(ctrlCode).padStart(2, '0')}")
+                        binding.btnModCtrl.isChecked = false
+                        return@setOnKeyListener true
+                    }
+                }
+                if (isAltLatched) {
+                    val c = event.unicodeChar.toChar()
+                    if (c.isLetterOrDigit()) {
+                        sendAnsiSequence("\\u001b$c")
+                        binding.btnModAlt.isChecked = false
+                        return@setOnKeyListener true
+                    }
+                }
+            }
+            false
+        }
+    }
+
+    private fun showFunctionKeysDialog() {
+        val fKeys = Array(12) { "F${it + 1}" }
+        val fSequences = arrayOf(
+            "\\u001bOP", "\\u001bOQ", "\\u001bOR", "\\u001bOS",
+            "\\u001b[15~", "\\u001b[17~", "\\u001b[18~", "\\u001b[19~",
+            "\\u001b[20~", "\\u001b[21~", "\\u001b[23~", "\\u001b[24~"
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Function Keys (Fn)")
+            .setItems(fKeys) { _, which ->
+                sendAnsiSequence(fSequences[which])
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun sendAnsiSequence(seq: String) {
+        val wv = binding.webViewTerminal
+        wv.requestFocus()
+        wv.evaluateJavascript(
+            """
+            (function() {
+                if (window.term) {
+                    window.term.write('$seq');
+                }
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    private fun sendTextToTerminal(text: String) {
+        val wv = binding.webViewTerminal
+        wv.requestFocus()
+        val escaped = text.replace("\\", "\\\\").replace("'", "\\'")
+        wv.evaluateJavascript(
+            """
+            (function() {
+                if (window.term) {
+                    window.term.write('$escaped');
+                }
+            })();
+            """.trimIndent(), null
+        )
     }
 
     private fun sendKeyToTerminal(keyCode: Int, ansiSequence: String) {
