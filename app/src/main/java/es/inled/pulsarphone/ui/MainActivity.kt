@@ -105,6 +105,7 @@ class MainActivity : AppCompatActivity() {
         updateNotificationSyncButton()
         checkPhoneCastStatus()
         refreshDevicesTab()
+        binding.tabTools.switchAskBeforeAccept.isChecked = PulsarPhoneApp.instance.isFlydropAskBeforeAccept()
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -230,6 +231,14 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.pc_paired_success, alias), Toast.LENGTH_SHORT).show()
             refreshStatusAndApps()
             refreshDevicesTab()
+        }
+
+        binding.tabTools.switchAskBeforeAccept.isChecked = PulsarPhoneApp.instance.isFlydropAskBeforeAccept()
+        binding.tabTools.switchAskBeforeAccept.setOnCheckedChangeListener { _, isChecked ->
+            PulsarPhoneApp.instance.setFlydropAskBeforeAccept(isChecked)
+        }
+        binding.tabTools.cardFlydropSettings.setOnClickListener {
+            binding.tabTools.switchAskBeforeAccept.isChecked = !binding.tabTools.switchAskBeforeAccept.isChecked
         }
 
         updateNotificationSyncButton()

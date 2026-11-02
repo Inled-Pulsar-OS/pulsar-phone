@@ -123,6 +123,16 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- FlyDrop Action BroadcastReceiver -->
+        <receiver
+            android:name=".net.FlydropActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="es.inled.pulsarphone.ACTION_ACCEPT_TRANSFER" />
+                <action android:name="es.inled.pulsarphone.ACTION_DECLINE_TRANSFER" />
+            </intent-filter>
+        </receiver>
+
         <!-- Notification Listener Service -->
         <service
             android:name=".service.PulsarNotificationService"

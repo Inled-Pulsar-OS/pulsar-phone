@@ -139,4 +139,10 @@
     <string name="flydrop_view_file_title">File Received</string>
     <string name="flydrop_open_action">Open</string>
     <string name="flydrop_close">Close</string>
+    <string name="flydrop_ask_before_accept">Ask before accepting</string>
+    <string name="flydrop_ask_before_accept_desc">Request confirmation before receiving incoming files</string>
+    <string name="flydrop_incoming_transfer">Incoming Transfer</string>
+    <string name="flydrop_wants_to_send">%1$s wants to send you %2$s</string>
+    <string name="flydrop_accept">Accept</string>
+    <string name="flydrop_decline">Decline</string>
 </resources>

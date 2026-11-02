@@ -179,6 +179,14 @@ class PulsarPhoneApp : Application() {
         saveDevice(config, setActive = true)
     }
 
+    fun isFlydropAskBeforeAccept(): Boolean {
+        return prefs.getBoolean(KEY_FLYDROP_ASK_BEFORE_ACCEPT, false)
+    }
+
+    fun setFlydropAskBeforeAccept(ask: Boolean) {
+        prefs.edit().putBoolean(KEY_FLYDROP_ASK_BEFORE_ACCEPT, ask).apply()
+    }
+
     companion object {
         lateinit var instance: PulsarPhoneApp
             private set
@@ -192,5 +200,6 @@ class PulsarPhoneApp : Application() {
         private const val KEY_PC_ALIAS = "pc_alias"
         private const val KEY_FLYDROP_PORT = "flydrop_port"
         private const val KEY_BROADWAY_PORT = "broadway_port"
+        private const val KEY_FLYDROP_ASK_BEFORE_ACCEPT = "flydrop_ask_before_accept"
     }
 }

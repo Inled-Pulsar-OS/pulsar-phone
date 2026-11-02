@@ -23,10 +23,13 @@ import es.inled.pulsarphone.PulsarPhoneApp
 import es.inled.pulsarphone.R
 import es.inled.pulsarphone.ui.FileReceivedActivity
 import es.inled.pulsarphone.ui.TextReceivedActivity
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -114,6 +117,19 @@ object FlydropServer {
     )
 
     private val activeSessions = ConcurrentHashMap<String, IncomingSession>()
+    private val pendingDecisions = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+
+    fun respondDecision(sessionId: String, accepted: Boolean) {
+        val def = pendingDecisions.remove(sessionId)
+        def?.complete(accepted)
+        try {
+            val notifId = sessionId.hashCode()
+            val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(notifId)
+        } catch (e: Exception) {
+            // Ignore
+        }
+    }
 
     fun start(context: Context) {
         if (isRunning) return
@@ -309,6 +325,40 @@ object FlydropServer {
 
             val sessionId = UUID.randomUUID().toString()
             val session = IncomingSession(sessionId, senderAlias, filesMap, tokensMap)
+
+            // Check if user configured to ask before accepting
+            val askBeforeAccept = PulsarPhoneApp.instance.isFlydropAskBeforeAccept()
+
+            if (askBeforeAccept) {
+                val deferred = CompletableDeferred<Boolean>()
+                pendingDecisions[sessionId] = deferred
+
+                val firstFile = filesMap.values.firstOrNull()?.fileName ?: "archivo"
+                val summary = if (filesMap.size > 1) "$firstFile (+${filesMap.size - 1})" else firstFile
+
+                promptUserForAcceptance(sessionId, senderAlias, summary)
+
+                val accepted = runBlocking {
+                    withTimeoutOrNull(45000L) {
+                        deferred.await()
+                    } ?: false
+                }
+                pendingDecisions.remove(sessionId)
+
+                try {
+                    val notifId = sessionId.hashCode()
+                    val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    nm.cancel(notifId)
+                } catch (e: Exception) {
+                    // Ignore
+                }
+
+                if (!accepted) {
+                    sendHttpResponse(output, 403, "Forbidden", "{\"message\":\"Transfer declined by recipient\"}", "application/json")
+                    return
+                }
+            }
+
             activeSessions[sessionId] = session
 
             val resp = mapOf(
@@ -319,6 +369,70 @@ object FlydropServer {
         } catch (e: Exception) {
             Log.e(TAG, "prepare-upload error: ${e.message}")
             sendHttpResponse(output, 400, "Bad Request", "{\"message\":\"Invalid payload\"}", "application/json")
+        }
+    }
+
+    private fun promptUserForAcceptance(sessionId: String, senderAlias: String, summary: String) {
+        val notifId = sessionId.hashCode()
+
+        // 1. High-priority Heads-up Notification with Accept / Decline action buttons
+        val acceptIntent = Intent(appContext, FlydropActionReceiver::class.java).apply {
+            action = FlydropActionReceiver.ACTION_ACCEPT
+            putExtra(FlydropActionReceiver.EXTRA_SESSION_ID, sessionId)
+            putExtra(FlydropActionReceiver.EXTRA_NOTIF_ID, notifId)
+        }
+        val acceptPending = PendingIntent.getBroadcast(
+            appContext,
+            notifId,
+            acceptIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val declineIntent = Intent(appContext, FlydropActionReceiver::class.java).apply {
+            action = FlydropActionReceiver.ACTION_DECLINE
+            putExtra(FlydropActionReceiver.EXTRA_SESSION_ID, sessionId)
+            putExtra(FlydropActionReceiver.EXTRA_NOTIF_ID, notifId)
+        }
+        val declinePending = PendingIntent.getBroadcast(
+            appContext,
+            notifId + 1,
+            declineIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notif = NotificationCompat.Builder(appContext, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(appContext.getString(R.string.flydrop_incoming_transfer))
+            .setContentText(appContext.getString(R.string.flydrop_wants_to_send, senderAlias, summary))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .addAction(0, appContext.getString(R.string.flydrop_accept), acceptPending)
+            .addAction(0, appContext.getString(R.string.flydrop_decline), declinePending)
+            .build()
+
+        val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(notifId, notif)
+
+        // 2. If app is in foreground, also show AlertDialog directly on current activity
+        mainHandler.post {
+            val activity = PulsarPhoneApp.instance.currentActivity
+            if (activity != null && !activity.isFinishing) {
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                    .setTitle(R.string.flydrop_incoming_transfer)
+                    .setMessage(activity.getString(R.string.flydrop_wants_to_send, senderAlias, summary))
+                    .setPositiveButton(R.string.flydrop_accept) { _, _ ->
+                        respondDecision(sessionId, true)
+                    }
+                    .setNegativeButton(R.string.flydrop_decline) { _, _ ->
+                        respondDecision(sessionId, false)
+                    }
+                    .setOnCancelListener {
+                        respondDecision(sessionId, false)
+                    }
+                    .show()
+            }
         }
     }
 
