@@ -21,6 +21,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import es.inled.pulsarphone.PulsarPhoneApp
 import es.inled.pulsarphone.R
+import es.inled.pulsarphone.ui.FileReceivedActivity
 import es.inled.pulsarphone.ui.TextReceivedActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -389,14 +390,13 @@ object FlydropServer {
             sendHttpResponse(output, 200, "OK", "{\"message\":\"OK\"}", "application/json")
         } else {
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val pulsarDir = File(downloadsDir, "Pulsar").apply { mkdirs() }
-            var targetFile = File(pulsarDir, fileName)
+            var targetFile = File(downloadsDir, fileName)
 
             var counter = 1
             val baseName = fileName.substringBeforeLast(".")
             val ext = if (fileName.contains(".")) "." + fileName.substringAfterLast(".") else ""
             while (targetFile.exists()) {
-                targetFile = File(pulsarDir, "$baseName ($counter)$ext")
+                targetFile = File(downloadsDir, "$baseName ($counter)$ext")
                 counter++
             }
 
@@ -421,7 +421,7 @@ object FlydropServer {
             val intent = Intent(appContext, TextReceivedActivity::class.java).apply {
                 putExtra(TextReceivedActivity.EXTRA_TEXT, text)
                 putExtra(TextReceivedActivity.EXTRA_SENDER, senderAlias)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             try {
                 appContext.startActivity(intent)
@@ -429,7 +429,7 @@ object FlydropServer {
                 Log.e(TAG, "Error starting TextReceivedActivity: ${e.message}")
             }
 
-            // Also show system notification
+            // High-priority Heads-up Notification
             val pendingIntent = PendingIntent.getActivity(
                 appContext,
                 System.currentTimeMillis().toInt(),
@@ -442,9 +442,17 @@ object FlydropServer {
                 .setContentTitle(appContext.getString(R.string.flydrop_text_received_title, senderAlias))
                 .setContentText(if (text.length > 80) text.substring(0, 80) + "..." else text)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
+                .setFullScreenIntent(pendingIntent, true)
+                .addAction(
+                    0,
+                    appContext.getString(R.string.flydrop_copy_action),
+                    pendingIntent
+                )
                 .build()
 
             val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -455,9 +463,24 @@ object FlydropServer {
     private fun onFileReceived(file: File, senderAlias: String, mimeType: String) {
         Log.i(TAG, "File received: ${file.absolutePath} from $senderAlias")
 
-        MediaScannerConnection.scanFile(appContext, arrayOf(file.absolutePath), null, null)
+        MediaScannerConnection.scanFile(appContext, arrayOf(file.absolutePath), arrayOf(mimeType), null)
 
         mainHandler.post {
+            val popupIntent = Intent(appContext, FileReceivedActivity::class.java).apply {
+                putExtra(FileReceivedActivity.EXTRA_FILE_PATH, file.absolutePath)
+                putExtra(FileReceivedActivity.EXTRA_SENDER, senderAlias)
+                putExtra(FileReceivedActivity.EXTRA_MIME, mimeType)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+
+            // Launch popup window over screen
+            try {
+                appContext.startActivity(popupIntent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting FileReceivedActivity: ${e.message}")
+            }
+
+            // Direct open Intent via FileProvider
             val uri: Uri = try {
                 FileProvider.getUriForFile(appContext, "${appContext.packageName}.fileprovider", file)
             } catch (e: Exception) {
@@ -470,10 +493,17 @@ object FlydropServer {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
 
-            val pendingIntent = PendingIntent.getActivity(
+            val viewPendingIntent = PendingIntent.getActivity(
+                appContext,
+                (System.currentTimeMillis() + 1).toInt(),
+                viewIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val dialogPendingIntent = PendingIntent.getActivity(
                 appContext,
                 System.currentTimeMillis().toInt(),
-                viewIntent,
+                popupIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
@@ -481,9 +511,17 @@ object FlydropServer {
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle(appContext.getString(R.string.flydrop_file_received_title, file.name))
                 .setContentText(appContext.getString(R.string.flydrop_file_received_desc))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setAutoCancel(true)
-                .setContentIntent(pendingIntent)
+                .setContentIntent(dialogPendingIntent)
+                .setFullScreenIntent(dialogPendingIntent, true)
+                .addAction(
+                    0,
+                    appContext.getString(R.string.flydrop_open_action),
+                    viewPendingIntent
+                )
                 .build()
 
             val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

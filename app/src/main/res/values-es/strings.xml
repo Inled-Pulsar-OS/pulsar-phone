@@ -136,5 +136,7 @@
     <string name="flydrop_copy_action">Copiar</string>
     <string name="flydrop_copied_toast">Texto copiado al portapapeles</string>
     <string name="flydrop_view_text_title">Texto recibido</string>
+    <string name="flydrop_view_file_title">Archivo recibido</string>
+    <string name="flydrop_open_action">Abrir</string>
     <string name="flydrop_close">Cerrar</string>
 </resources>
