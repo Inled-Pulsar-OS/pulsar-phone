@@ -3,6 +3,7 @@ package es.inled.pulsarphone
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Bundle
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import es.inled.pulsarphone.data.ConnectionConfig
@@ -12,12 +13,28 @@ class PulsarPhoneApp : Application() {
     private lateinit var prefs: SharedPreferences
     private val gson = Gson()
 
+    var currentActivity: android.app.Activity? = null
+        private set
+
+    val isForeground: Boolean get() = currentActivity != null
+
     override fun onCreate() {
         super.onCreate()
         instance = this
         com.google.android.material.color.DynamicColors.applyToActivitiesIfAvailable(this)
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         migrateSingleConfigIfNeeded()
+
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: android.app.Activity) { currentActivity = activity }
+            override fun onActivityPaused(activity: android.app.Activity) { if (currentActivity == activity) currentActivity = null }
+            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityStarted(activity: android.app.Activity) {}
+            override fun onActivityStopped(activity: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: android.app.Activity) { if (currentActivity == activity) currentActivity = null }
+        })
+
         es.inled.pulsarphone.net.PulsarVpnManager.init(this)
         es.inled.pulsarphone.net.FlydropServer.start(this)
     }

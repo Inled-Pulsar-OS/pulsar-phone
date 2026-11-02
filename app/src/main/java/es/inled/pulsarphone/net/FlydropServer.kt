@@ -417,16 +417,22 @@ object FlydropServer {
             cm.setPrimaryClip(ClipData.newPlainText("FlyDrop", text))
             Toast.makeText(appContext, appContext.getString(R.string.flydrop_copied_toast), Toast.LENGTH_SHORT).show()
 
-            // Open clean dialog activity (no emojis)
+            // Open clean dialog activity if app is in foreground or can draw overlays
             val intent = Intent(appContext, TextReceivedActivity::class.java).apply {
                 putExtra(TextReceivedActivity.EXTRA_TEXT, text)
                 putExtra(TextReceivedActivity.EXTRA_SENDER, senderAlias)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
-            try {
-                appContext.startActivity(intent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error starting TextReceivedActivity: ${e.message}")
+
+            val canShowActivityNow = PulsarPhoneApp.instance.isForeground ||
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && android.provider.Settings.canDrawOverlays(appContext))
+
+            if (canShowActivityNow) {
+                try {
+                    appContext.startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error starting TextReceivedActivity: ${e.message}")
+                }
             }
 
             // High-priority Heads-up Notification
@@ -473,11 +479,15 @@ object FlydropServer {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
 
-            // Launch popup window over screen
-            try {
-                appContext.startActivity(popupIntent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error starting FileReceivedActivity: ${e.message}")
+            val canShowFileNow = PulsarPhoneApp.instance.isForeground ||
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && android.provider.Settings.canDrawOverlays(appContext))
+
+            if (canShowFileNow) {
+                try {
+                    appContext.startActivity(popupIntent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error starting FileReceivedActivity: ${e.message}")
+                }
             }
 
             // Direct open Intent via FileProvider
