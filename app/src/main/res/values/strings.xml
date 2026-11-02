@@ -128,4 +128,13 @@
     <string name="modifier_ctrl_active">CTRL active: press key to combine</string>
     <string name="modifier_alt_active">ALT active: press key to combine</string>
     <string name="modifier_win_active">WIN active: press key to combine</string>
+    <string name="flydrop_channel_name">FlyDrop Transfers</string>
+    <string name="flydrop_channel_desc">Notifications for received files and text</string>
+    <string name="flydrop_text_received_title">Text received from %1$s</string>
+    <string name="flydrop_file_received_title">File received: %1$s</string>
+    <string name="flydrop_file_received_desc">Tap to open the file</string>
+    <string name="flydrop_copy_action">Copy</string>
+    <string name="flydrop_copied_toast">Text copied to clipboard</string>
+    <string name="flydrop_view_text_title">Text Received</string>
+    <string name="flydrop_close">Close</string>
 </resources>

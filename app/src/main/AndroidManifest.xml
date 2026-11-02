@@ -91,6 +91,25 @@
             </intent-filter>
         </activity>
 
+        <!-- Text Received Dialog Activity -->
+        <activity
+            android:name=".ui.TextReceivedActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="@string/flydrop_view_text_title"
+            android:theme="@style/Theme.PulsarPhone.Dialog" />
+
+        <!-- FileProvider for opening received files -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Notification Listener Service -->
         <service
             android:name=".service.PulsarNotificationService"

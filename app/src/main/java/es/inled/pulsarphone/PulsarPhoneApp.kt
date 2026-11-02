@@ -19,6 +19,7 @@ class PulsarPhoneApp : Application() {
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         migrateSingleConfigIfNeeded()
         es.inled.pulsarphone.net.PulsarVpnManager.init(this)
+        es.inled.pulsarphone.net.FlydropServer.start(this)
     }
 
     private fun migrateSingleConfigIfNeeded() {
