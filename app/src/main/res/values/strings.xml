@@ -1,6 +1,9 @@
 <resources>
     <string name="app_name">Pulsar Phone</string>
     <string name="vpn_title">Pulsar Private Network</string>
+    <string name="vpn_install_title">Connect Outside Home (VPN)</string>
+    <string name="vpn_install_message">To connect to your PC using mobile data from anywhere, Pulsar VPN uses Tailscale (encrypted peer-to-peer network).\n\nInstall Tailscale on this device and sign in with the same account as on your PC.</string>
+    <string name="vpn_install_btn">Install Tailscale</string>
     <string name="vpn_connected">Connected to PC</string>
     <string name="vpn_disconnected">Disconnected from PC</string>
     <string name="pc_apps_title">Pulsar OS Applications</string>

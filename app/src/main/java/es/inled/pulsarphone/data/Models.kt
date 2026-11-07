@@ -15,6 +15,7 @@ data class PcApp(
 data class ConnectionConfig(
     val id: String = java.util.UUID.randomUUID().toString(),
     val pcIp: String,
+    val vpnIp: String = "",
     val pcPort: Int = 8989,
     val token: String,
     val pcAlias: String = "Pulsar PC",

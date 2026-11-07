@@ -44,17 +44,30 @@ object PulsarApiClient {
 
     suspend fun ping(): Boolean = withContext(Dispatchers.IO) {
         val currentCfg = PulsarPhoneApp.instance.getConfig()
+        // 1. Try currently configured pcIp
         if (rawPing(currentCfg.pcIp, currentCfg.pcPort)) {
             return@withContext true
         }
 
-        // Current IP unreachable - attempt auto-discovery over UDP broadcast
-        val discoveredIp = discoverPcIp(currentCfg.token)
-        if (discoveredIp != null) {
-            if (rawPing(discoveredIp, currentCfg.pcPort)) {
-                PulsarPhoneApp.instance.saveConfig(currentCfg.copy(pcIp = discoveredIp))
+        // 2. Try vpnIp if configured and different from pcIp
+        if (currentCfg.vpnIp.isNotBlank() && currentCfg.vpnIp != currentCfg.pcIp) {
+            if (rawPing(currentCfg.vpnIp, currentCfg.pcPort)) {
+                PulsarPhoneApp.instance.saveConfig(currentCfg.copy(pcIp = currentCfg.vpnIp))
                 return@withContext true
             }
+        }
+
+        // 3. Current IP unreachable - attempt auto-discovery over UDP broadcast
+        val discovered = discoverPc(currentCfg.token)
+        if (discovered != null) {
+            val (ip, vpnIp) = discovered
+            PulsarPhoneApp.instance.saveConfig(
+                currentCfg.copy(
+                    pcIp = ip,
+                    vpnIp = if (vpnIp.isNotBlank()) vpnIp else currentCfg.vpnIp
+                )
+            )
+            return@withContext true
         }
         false
     }
@@ -72,7 +85,7 @@ object PulsarApiClient {
         }
     }
 
-    private fun discoverPcIp(expectedToken: String): String? {
+    private fun discoverPc(expectedToken: String): Pair<String, String>? {
         var socket: DatagramSocket? = null
         try {
             socket = DatagramSocket().apply {
@@ -108,7 +121,7 @@ object PulsarApiClient {
             )
             for (candidate in candidates) {
                 if (rawPing(candidate, 8989)) {
-                    return candidate
+                    return Pair(candidate, tailscaleIp)
                 }
             }
         } catch (e: Exception) {

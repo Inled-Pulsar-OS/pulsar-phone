@@ -1,6 +1,9 @@
 <resources>
     <string name="app_name">Pulsar Phone</string>
     <string name="vpn_title">Red Privada Pulsar</string>
+    <string name="vpn_install_title">Conectar fuera de casa (VPN)</string>
+    <string name="vpn_install_message">Para conectar con tu PC por datos móviles desde cualquier lugar, Pulsar VPN utiliza Tailscale (red cifrada punto a punto).\n\nInstala Tailscale en este teléfono e inicia sesión con la misma cuenta que en tu PC.</string>
+    <string name="vpn_install_btn">Instalar Tailscale</string>
     <string name="vpn_connected">Conectado al PC</string>
     <string name="vpn_disconnected">Desconectado del PC</string>
     <string name="pc_apps_title">Aplicaciones de Pulsar OS</string>

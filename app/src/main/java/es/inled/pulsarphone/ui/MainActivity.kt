@@ -9,7 +9,6 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.Uri
-import android.net.VpnService
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -33,7 +32,6 @@ import es.inled.pulsarphone.databinding.ActivityMainBinding
 import es.inled.pulsarphone.databinding.ItemSavedDeviceBinding
 import es.inled.pulsarphone.net.FlydropClient
 import es.inled.pulsarphone.net.PulsarApiClient
-import es.inled.pulsarphone.net.PulsarVpnManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,17 +52,6 @@ class MainActivity : AppCompatActivity() {
     private val qrScannerLauncher = registerForActivityResult(ScanContract()) { result ->
         if (result.contents != null) {
             handleScannedUri(result.contents)
-        }
-    }
-
-    // Android VpnService permission launcher
-    private val vpnPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            startInternalVpn()
-        } else {
-            Toast.makeText(this, getString(R.string.vpn_permission_denied), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -359,13 +346,16 @@ class MainActivity : AppCompatActivity() {
         val uri = Uri.parse(content.trim())
         if (uri.scheme == "pulsar" && uri.host == "pair") {
             val ip = uri.getQueryParameter("ip") ?: ""
+            val vpnIp = uri.getQueryParameter("vpn_ip") ?: uri.getQueryParameter("vpnIp") ?: ""
             val portStr = uri.getQueryParameter("port") ?: "8989"
             val token = uri.getQueryParameter("token") ?: ""
             val alias = uri.getQueryParameter("alias") ?: "Pulsar PC"
 
-            if (ip.isNotBlank() && token.isNotBlank()) {
+            val targetIp = ip.ifBlank { vpnIp }
+            if (targetIp.isNotBlank() && token.isNotBlank()) {
                 val cfg = ConnectionConfig(
-                    pcIp = ip,
+                    pcIp = targetIp,
+                    vpnIp = vpnIp,
                     pcPort = portStr.toIntOrNull() ?: 8989,
                     token = token,
                     pcAlias = alias
@@ -413,67 +403,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleVpn() {
-        val isRealVpn = isRealVpnActive() || PulsarVpnManager.isVpnRunning()
-        if (isRealVpn) {
-            if (PulsarVpnManager.isVpnRunning()) {
-                lifecycleScope.launch {
-                    PulsarVpnManager.stopTunnel()
-                    updateVpnButtonState()
-                    Toast.makeText(this@MainActivity, getString(R.string.vpn_disconnected_toast), Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                val tsIntent = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
-                if (tsIntent != null) {
-                    startActivity(tsIntent)
-                } else {
-                    try {
-                        startActivity(Intent("android.net.vpn.SETTINGS"))
-                    } catch (e: Exception) {
-                        Toast.makeText(this, getString(R.string.vpn_active_system), Toast.LENGTH_SHORT).show()
-                    }
-                }
+        val isRealVpn = isRealVpnActive()
+        val tsIntent = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
+        if (tsIntent != null) {
+            startActivity(tsIntent)
+        } else if (isRealVpn) {
+            try {
+                startActivity(Intent("android.net.vpn.SETTINGS"))
+            } catch (e: Exception) {
+                Toast.makeText(this, getString(R.string.vpn_active_system), Toast.LENGTH_SHORT).show()
             }
         } else {
-            val tsIntent = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
-            if (tsIntent != null) {
-                startActivity(tsIntent)
-            } else {
-                val vpnIntent = VpnService.prepare(this)
-                if (vpnIntent != null) {
-                    vpnPermissionLauncher.launch(vpnIntent)
-                } else {
-                    startInternalVpn()
-                }
-            }
+            showTailscaleInstallDialog()
         }
     }
 
-    private fun startInternalVpn() {
-        val cfg = PulsarPhoneApp.instance.getConfig()
-        if (!PulsarPhoneApp.instance.isConfigured()) {
-            Toast.makeText(this, getString(R.string.pair_first_prompt), Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        lifecycleScope.launch {
-            Toast.makeText(this@MainActivity, getString(R.string.starting_vpn), Toast.LENGTH_SHORT).show()
-            val res = PulsarVpnManager.startTunnel(
-                serverEndpoint = cfg.pcIp,
-                serverPubKey = "",
-                serverPort = 51820
-            )
-            updateVpnButtonState()
-            if (res.isSuccess) {
-                Toast.makeText(this@MainActivity, getString(R.string.vpn_connected_to, cfg.pcAlias), Toast.LENGTH_SHORT).show()
-            } else {
-                val err = res.exceptionOrNull()?.message ?: ""
-                Toast.makeText(this@MainActivity, getString(R.string.vpn_start_error, err), Toast.LENGTH_LONG).show()
+    private fun showTailscaleInstallDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.vpn_install_title)
+            .setMessage(R.string.vpn_install_message)
+            .setPositiveButton(R.string.vpn_install_btn) { _, _ ->
+                val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.tailscale.ipn"))
+                try {
+                    startActivity(marketIntent)
+                } catch (e: Exception) {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://tailscale.com/download")))
+                }
             }
-        }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun updateVpnButtonState() {
-        val isRealVpn = isRealVpnActive() || PulsarVpnManager.isVpnRunning()
+        val isRealVpn = isRealVpnActive()
         if (isRealVpn) {
             binding.tabTools.btnToggleVpn.text = getString(R.string.vpn_status_active)
         } else {

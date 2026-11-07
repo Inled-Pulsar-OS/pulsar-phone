@@ -47,6 +47,7 @@ class PulsarPhoneApp : Application() {
             if (!ip.isNullOrBlank() && !token.isNullOrBlank()) {
                 val dev = ConnectionConfig(
                     pcIp = ip,
+                    vpnIp = prefs.getString(KEY_VPN_IP, "") ?: "",
                     pcPort = prefs.getInt(KEY_PC_PORT, 8989),
                     token = token,
                     pcAlias = prefs.getString(KEY_PC_ALIAS, "Pulsar PC") ?: "Pulsar PC",
@@ -91,6 +92,7 @@ class PulsarPhoneApp : Application() {
 
         return ConnectionConfig(
             pcIp = prefs.getString(KEY_PC_IP, "127.0.0.1") ?: "127.0.0.1",
+            vpnIp = prefs.getString(KEY_VPN_IP, "") ?: "",
             pcPort = prefs.getInt(KEY_PC_PORT, 8989),
             token = prefs.getString(KEY_TOKEN, "") ?: "",
             pcAlias = prefs.getString(KEY_PC_ALIAS, "Pulsar PC") ?: "Pulsar PC",
@@ -110,6 +112,7 @@ class PulsarPhoneApp : Application() {
                 .putString(KEY_DEVICES_JSON, json)
                 .putString(KEY_ACTIVE_DEVICE_ID, deviceId)
                 .putString(KEY_PC_IP, updated.pcIp)
+                .putString(KEY_VPN_IP, updated.vpnIp)
                 .putInt(KEY_PC_PORT, updated.pcPort)
                 .putString(KEY_TOKEN, updated.token)
                 .putString(KEY_PC_ALIAS, updated.pcAlias)
@@ -141,6 +144,7 @@ class PulsarPhoneApp : Application() {
         if (setActive || devices.size == 1) {
             editor.putString(KEY_ACTIVE_DEVICE_ID, devToSave.id)
                 .putString(KEY_PC_IP, devToSave.pcIp)
+                .putString(KEY_VPN_IP, devToSave.vpnIp)
                 .putInt(KEY_PC_PORT, devToSave.pcPort)
                 .putString(KEY_TOKEN, devToSave.token)
                 .putString(KEY_PC_ALIAS, devToSave.pcAlias)
@@ -161,6 +165,7 @@ class PulsarPhoneApp : Application() {
             if (nextDev != null) {
                 editor.putString(KEY_ACTIVE_DEVICE_ID, nextDev.id)
                     .putString(KEY_PC_IP, nextDev.pcIp)
+                    .putString(KEY_VPN_IP, nextDev.vpnIp)
                     .putInt(KEY_PC_PORT, nextDev.pcPort)
                     .putString(KEY_TOKEN, nextDev.token)
                     .putString(KEY_PC_ALIAS, nextDev.pcAlias)
@@ -169,6 +174,7 @@ class PulsarPhoneApp : Application() {
             } else {
                 editor.remove(KEY_ACTIVE_DEVICE_ID)
                     .remove(KEY_PC_IP)
+                    .remove(KEY_VPN_IP)
                     .remove(KEY_TOKEN)
             }
         }
@@ -195,6 +201,7 @@ class PulsarPhoneApp : Application() {
         private const val KEY_DEVICES_JSON = "saved_devices_json"
         private const val KEY_ACTIVE_DEVICE_ID = "active_device_id"
         private const val KEY_PC_IP = "pc_ip"
+        private const val KEY_VPN_IP = "vpn_ip"
         private const val KEY_PC_PORT = "pc_port"
         private const val KEY_TOKEN = "auth_token"
         private const val KEY_PC_ALIAS = "pc_alias"
